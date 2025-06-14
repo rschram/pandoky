@@ -62,4 +62,12 @@
 
 ---
 
+### Future phases that the AI "forgot" about while it was handing out assignments
+
+* Refactoring plugin architecture to check for plugin dependencies and add required plugins data to 
+each existing plugin file. 
+* Implementing a macro plugin that lists clusters of related pages using 
+K-means clustering.
+
+
 **AI acknowledgement:** The AI is giving me more instructions on what to do next.
