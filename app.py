@@ -331,10 +331,12 @@ def view_page(page_name):
         abort(404) 
     except RuntimeError as e: 
         app.logger.error(f"Conversion error for page {page_name}: {e}")
-        abort(500, description=f"Error during document conversion: {e}")
+        flash(f"The page '{page_name}' could not be displayed due to a rendering error. Please fix the issue below. (Details: {e})", "error")
+        return redirect(url_for('edit_page', page_name=page_name))
     except Exception as e:
         app.logger.error(f"Unexpected error for page {page_name}: {e}", exc_info=True)
-        abort(500, description=f"An internal error occurred: {e}")
+        flash(f"The page '{page_name}' could not be displayed due to an unexpected error. Please fix the issue below. (Details: {e})", "error")
+        return redirect(url_for('edit_page', page_name=page_name))
 
 
 @app.route('/<path:page_name>/edit', methods=['GET'])

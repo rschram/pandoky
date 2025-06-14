@@ -32,8 +32,8 @@ PANDOC_ARGS = [
     '--citeproc',
     '--shift-heading-level-by=1',
     #    DEFAULT_PANDOC_MATH_RENDERER,
-    DEFAULT_BIB,
-    DEFAULT_CSL
+    f'--bibliography={DEFAULT_BIB}',
+    f'--csl={DEFAULT_CSL}'
 ]
 
 # Email Configuration 
