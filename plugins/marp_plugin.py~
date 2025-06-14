@@ -1,0 +1,140 @@
+# plugins/slideshow_plugin.py
+
+import os
+import frontmatter
+import subprocess
+from flask import Blueprint, send_from_directory, current_app, url_for, abort
+from werkzeug.utils import safe_join
+
+# --- Configuration ---
+SLIDESHOW_BLUEPRINT_NAME = 'slideshow_plugin'
+
+# --- Blueprint for serving the generated decks ---
+slideshow_bp = Blueprint(
+    SLIDESHOW_BLUEPRINT_NAME,
+    __name__
+)
+
+# --- Helper Functions ---
+def get_slideshow_path(app_instance, page_name):
+    """Gets the full path to a generated slideshow HTML file."""
+    slideshow_dir = app_instance.config.get('SLIDESHOW_DIR')
+    if not slideshow_dir:
+        app_instance.logger.error("Slideshow Plugin: SLIDESHOW_DIR is not configured in config.py!")
+        return None
+    return safe_join(slideshow_dir, page_name + '.html')
+
+# --- Core Logic ---
+def generate_slideshow(page_name, **kwargs):
+    """
+    Converts a page's Markdown file to a standalone Marp HTML slideshow.
+    """
+    source_file_path = kwargs.get('file_path')
+    app_context = kwargs.get('app_context', current_app)
+
+    if not source_file_path:
+        app_context.logger.error("Slideshow Plugin: 'file_path' not provided to generate_slideshow hook.")
+        return
+
+    app_context.logger.info(f"Slideshow Plugin: Generating slideshow for '{page_name}'.")
+    
+    slideshow_output_path = get_slideshow_path(app_context, page_name)
+    if not slideshow_output_path:
+        return
+
+    os.makedirs(os.path.dirname(slideshow_output_path), exist_ok=True)
+
+    try:
+        # Read the original file content
+        with open(source_file_path, 'r', encoding='utf-8') as f:
+            full_document_string = f.read()
+
+        # Clean the macro from the content
+        cleaned_content = full_document_string.replace('~~SLIDESHOW~~', '')
+
+        # --- FIX: Set environment variable to disable Chrome sandbox ---
+        # This is a common requirement for running headless browsers in server environments.
+        env = os.environ.copy()
+        env['CHROME_NO_SANDBOX'] = 'true'
+        
+        # Use subprocess to call the Marp CLI tool
+        # Marp reads the markdown and outputs a self-contained HTML file.
+        # It handles themes, styling, and JS injection automatically.
+        result = subprocess.run(
+            ['marp', '--html', '--output', slideshow_output_path],
+            input=cleaned_content,
+            text=True,
+            capture_output=True,
+            check=True,  # This will raise an exception if Marp fails
+            env=env
+        )
+        
+        app_context.logger.info(f"Slideshow Plugin: Successfully created slideshow at {slideshow_output_path}")
+        if result.stderr:
+             app_context.logger.warning(f"Slideshow Plugin: Marp process reported warnings: {result.stderr}")
+
+
+    except FileNotFoundError:
+        app_context.logger.error("Slideshow Plugin: 'marp' command not found. Please ensure the Marp CLI is installed and in the system's PATH.")
+    except subprocess.CalledProcessError as e:
+        app_context.logger.error(f"Slideshow Plugin: Marp CLI failed for '{page_name}': {e.stderr}", exc_info=True)
+    except Exception as e:
+        app_context.logger.error(f"Slideshow Plugin: Failed to generate slideshow for '{page_name}': {e}", exc_info=True)
+
+
+def delete_slideshow(page_name, **kwargs):
+    """Deletes the generated slideshow HTML file for a page."""
+    app_context = kwargs.get('app_context', current_app)
+    slideshow_path = get_slideshow_path(app_context, page_name)
+    if slideshow_path and os.path.exists(slideshow_path):
+        try:
+            os.remove(slideshow_path)
+            app_context.logger.info(f"Slideshow Plugin: Deleted slideshow for '{page_name}'.")
+        except Exception as e:
+            app_context.logger.error(f"Slideshow Plugin: Failed to delete slideshow for '{page_name}': {e}")
+
+
+# --- Route to Serve the Generated HTML ---
+@slideshow_bp.route('/slideshows/<path:page_name>.html')
+def serve_slideshow(page_name):
+    slideshow_dir = current_app.config.get('SLIDESHOW_DIR')
+    if not slideshow_dir:
+        abort(500, "Slideshow directory not configured.")
+    
+    if not os.path.exists(os.path.join(slideshow_dir, page_name + '.html')):
+        abort(404, "This slideshow has not been generated yet.")
+
+    return send_from_directory(slideshow_dir, page_name + '.html')
+
+
+# --- Macro Processing ---
+def process_slideshow_macro(markdown_content, current_page_slug, **kwargs):
+    if '~~SLIDESHOW~~' not in markdown_content:
+        return markdown_content
+
+    app_context = kwargs.get('app_context', current_app)
+    slideshow_path = get_slideshow_path(app_context, current_page_slug)
+    
+    if slideshow_path and os.path.exists(slideshow_path):
+        slideshow_url = url_for(f'{SLIDESHOW_BLUEPRINT_NAME}.serve_slideshow', page_name=current_page_slug)
+        replacement_md = f'<p class="slideshow-link"><a href="{slideshow_url}" target="_blank" rel="noopener noreferrer">View as Slideshow</a></p>'
+    else:
+        replacement_md = '<p class="slideshow-link"><em>Slideshow not yet generated. Please save the page again.</em></p>'
+        
+    return markdown_content.replace('~~SLIDESHOW~~', replacement_md)
+
+
+# --- Plugin Registration ---
+def register(app, register_hook):
+    app.register_blueprint(slideshow_bp)
+
+    register_hook('after_page_save', generate_slideshow)
+    register_hook('after_page_delete', delete_slideshow)
+    register_hook('process_page_macros', process_slideshow_macro)
+
+    if not app.config.get('SLIDESHOW_DIR'):
+        app.logger.error("Slideshow Plugin is active, but SLIDESHOW_DIR is not set in config.py. Slideshows will not be generated.")
+    else:
+        os.makedirs(app.config['SLIDESHOW_DIR'], exist_ok=True)
+    
+    app.logger.info("Marp slideshow plugin registered.")

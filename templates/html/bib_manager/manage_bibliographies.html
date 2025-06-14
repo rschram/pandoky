@@ -1,0 +1,55 @@
+{# pandoky/templates/html/bib_manager/manage_bibliographies.html #}
+{% extends "html/base_layout.html" %}
+{% block content %}
+
+        <h1>{{ title }}</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flash-messages">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <div class="section upload-form">
+            <h2>Upload New Bibliography File</h2>
+            <form method="POST" enctype="multipart/form-data" action="{{ url_for('.manage_bibliographies') }}">
+                <input type="file" name="bibfile" accept=".bib,.json,.yaml,.yml" required>
+                <button type="submit">Upload File</button>
+            </form>
+            <p><small>Allowed file types: .bib, .json, .yaml, .yml</small></p>
+        </div>
+
+        <div class="section">
+            <h2>Existing Bibliography Files</h2>
+            {% if files %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Filename</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for filename in files %}
+                        <tr>
+                            <td>{{ filename }}</td>
+                            <td class="actions">
+                                <form action="{{ url_for('.delete_bibliography_file', filename=filename) }}" method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete \'{{ filename }}\'?');">
+                                    <button type="submit">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No bibliography files found in <code>{{ config.BIB_DIR or 'data/bibliographies/' }}</code>.</p>
+            {% endif %}
+        </div>
+    </div>
+
+{% endblock %}

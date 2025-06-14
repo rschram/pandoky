@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="https://cyborg.rschram.org/" />
+    <title>{{ title }}</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Charis+SIL:ital,wght@0,400;0,700;1,400;1,700&family=Karla:ital,wght@0,200..800;1,200..800&family=VT323&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="static/style.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23F7F7EB'/><text x='50%' y='50%' font-family='VT323, monospace' font-size='14' fill='%235F7367' text-anchor='middle' dy='.35em'>C</text></svg>">
+    
+
+    {% if "mathjax" in config.DEFAULT_PANDOC_MATH_RENDERER or (frontmatter.math and "mathjax" in frontmatter.math) %}
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+      MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] }, svg: { fontCache: 'global' } };
+    </script>
+    {% endif %}
+</head>
+<body>
+
+   <header class="top-nav">
+        <!-- Site Title -->
+        <a href="{{ url_for('index') }}" class="site-title">Cyborgpedia</a>
+
+        <!-- Hamburger Button (for mobile) -->
+        <button class="hamburger-button" id="hamburger-button" aria-label="Menu" aria-expanded="false" aria-controls="top-nav-links">
+          <span class="bar"></span>
+          <span class="bar"></span>
+          <span class="bar"></span>
+        </button>
+
+        <!-- Navigation Links Container -->
+        <nav class="top-nav-links" id="top-nav-links">
+          <!-- Site-wide actions like Home, Index, Admin -->
+          <ul class="site-actions" data-label="Site actions:">
+            <li><span class="user-greeting">Logged in as: <strong>{{ current_user }}</strong></span></li>
+            {% if check_permission('admin_site') %}
+            <li><a href="{{ url_for('redirect_to_admin_dashboard') }}">Admin</a></li>
+            {% endif %}
+            {% if current_user %}
+            <li><a href="{{ url_for('auth_plugin.logout_route') }}">Logout</a></li>
+            {% else %}
+            <li><a href="{{ url_for('auth_plugin.login_route') }}">Login</a></li>
+            <li><a href="{{ url_for('auth_plugin.register_route') }}">Register</a></li>
+            {% endif %}
+            <li class="nav-search-item">
+              <form method="get" action="{{ url_for('bound_search_route') }}" class="nav-search-form">
+                <input type="search" name="query" placeholder="Search..." class="nav-search-input" aria-label="Search query">
+                <button type="submit" class="nav-search-button" aria-label="Search">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+                    <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+                  </svg>
+                </button>
+              </form>
+            </li>
+          </ul>
+        </nav>
+   </header>
+
+  
+  {% block content %}
+  <p>This is the basic page template.</p>
+  {% endblock %}
+    
+  <footer>
+    <p>This site was created and is maintained with <a href="site/pandoky">Pandoky</a>. This is a personal project of Ryan Schram, who can be reached by sending email to "ryan" at <a href="https://rschram.org">https://rschram.org</a>. Content is meant for educational, noncommercial purposes. Users may quote and cite the material here with proper attribution.</p>
+  </footer>
+  <script>
+    // JavaScript for Hamburger Menu Toggle
+    const hamburgerButton = document.getElementById('hamburger-button');
+    const navLinks = document.getElementById('top-nav-links');
+
+    if (hamburgerButton && navLinks) {
+        hamburgerButton.addEventListener('click', () => {
+            // Toggle the 'is-active' class on both the button and the nav links container
+            navLinks.classList.toggle('is-active');
+            hamburgerButton.classList.toggle('is-active');
+        });
+    }
+  </script>
+</body>
+</html>

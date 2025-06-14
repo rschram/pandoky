@@ -1,0 +1,95 @@
+{# pandoky/templates/html/bib_manager/manage_bibliographies.html #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - Pandoky Admin</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 20px; color: #333; }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1, h2 { margin-bottom: 0.75em; }
+        nav { margin-bottom: 1.5em; padding-bottom: 1em; border-bottom: 1px solid #eee; }
+        nav a { margin-right: 15px; text-decoration: none; color: #007bff; }
+        nav a:hover { text-decoration: underline; }
+        .section { margin-bottom: 2em; padding: 1.5em; background-color: #f9f9f9; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .section h2 { margin-top: 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1em; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #f0f0f0; }
+        .actions button { 
+            padding: 5px 10px; font-size: 0.9em; color: white; border: none; 
+            border-radius: 4px; cursor: pointer; background-color: #dc3545;
+        }
+        .actions button:hover { background-color: #c82333; }
+        .upload-form input[type="file"] { margin-bottom: 10px; }
+        .upload-form button { padding: 8px 15px; font-size: 1em; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .flash-messages { list-style-type: none; padding: 0; margin-bottom: 1em;}
+        .flash-messages li { padding: 10px; border-radius: 4px; margin-bottom: 10px; }
+        .flash-messages li.success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;}
+        .flash-messages li.error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;}
+        .flash-messages li.warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba;}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav>
+            <a href="{{ url_for('index') }}">Main Site Home</a> |
+            {# Link back to the main ACL admin dashboard if it exists #}
+            {% if 'admin_acl_editor_plugin.dashboard' in app.url_map._rules_by_endpoint %}
+                <a href="{{ url_for('admin_acl_editor_plugin.dashboard') }}">ACL Admin Dashboard</a> |
+            {% endif %}
+            <a href="{{ url_for('bib_manager_plugin.manage_bibliographies') }}">Bibliography Manager</a>
+        </nav>
+
+        <h1>{{ title }}</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flash-messages">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <div class="section upload-form">
+            <h2>Upload New Bibliography File</h2>
+            <form method="POST" enctype="multipart/form-data" action="{{ url_for('.manage_bibliographies') }}">
+                <input type="file" name="bibfile" accept=".bib,.json,.yaml,.yml" required>
+                <button type="submit">Upload File</button>
+            </form>
+            <p><small>Allowed file types: .bib, .json, .yaml, .yml</small></p>
+        </div>
+
+        <div class="section">
+            <h2>Existing Bibliography Files</h2>
+            {% if files %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Filename</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for filename in files %}
+                        <tr>
+                            <td>{{ filename }}</td>
+                            <td class="actions">
+                                <form action="{{ url_for('.delete_bibliography_file', filename=filename) }}" method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete \'{{ filename }}\'?');">
+                                    <button type="submit">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No bibliography files found in <code>{{ config.BIB_DIR or 'data/bibliographies/' }}</code>.</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

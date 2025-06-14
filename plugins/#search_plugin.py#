@@ -1,0 +1,192 @@
+# pandoky/plugins/search_plugin.py
+
+import os
+import json
+import re
+from collections import defaultdict, Counter
+from flask import request, render_template, url_for # Specific Flask imports for the plugin's route
+
+# --- Configuration (relative to the indexer plugin's filenames) ---
+PAGE_META_FILENAME = "indexer_page_meta.json"
+VOCABULARY_FILENAME = "indexer_vocabulary.json"
+INVERTED_INDEX_FILENAME = "indexer_inverted_index.json"
+
+# --- Helper Functions (some might be similar to indexer, but kept local for plugin encapsulation) ---
+
+def get_data_file_path(app_instance, filename):
+    """Constructs the full path for a data file within the app's DATA_DIR."""
+    data_dir = app_instance.config.get('DATA_DIR', os.path.join(app_instance.root_path, 'data'))
+    return os.path.join(data_dir, filename)
+
+def load_json_data(app_instance, filename, default_data=None):
+    """Loads data from a JSON file. Returns default_data if file not found or error."""
+    if default_data is None:
+        default_data = {}
+    file_path = get_data_file_path(app_instance, filename)
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            app_instance.logger.error(f"SearchPlugin: Error decoding JSON from {file_path}")
+            return default_data
+        except Exception as e:
+            app_instance.logger.error(f"SearchPlugin: Error loading {file_path}: {e}")
+            return default_data
+    app_instance.logger.warning(f"SearchPlugin: Data file {file_path} not found.")
+    return default_data
+
+def tokenize_and_normalize_query(query_string):
+    """Tokenizes and normalizes a search query string."""
+    if not query_string:
+        return []
+    words = re.findall(r'\b\w+\b', query_string.lower())
+    return words
+
+# --- Search Logic ---
+
+def perform_search(app_instance, query_string):
+    """
+    Performs a search based on the query_string.
+    Returns a list of result dictionaries, e.g., 
+    [{'slug': 'page-slug', 'title': 'Page Title', 'score': X.X, 'snippet': '...'}],
+    ranked by score.
+    """
+    if not query_string:
+        return []
+
+    app_instance.logger.info(f"SearchPlugin: Performing search for query: '{query_string}'")
+
+    # Load necessary index data
+    page_meta = load_json_data(app_instance, PAGE_META_FILENAME, 
+                               default_data={"slug_to_id": {}, "id_to_slug": {}})
+    vocabulary = load_json_data(app_instance, VOCABULARY_FILENAME, 
+                                default_data={"word_to_id": {}})
+    inverted_index = load_json_data(app_instance, INVERTED_INDEX_FILENAME, default_data={})
+
+    if not page_meta["id_to_slug"] or not vocabulary["word_to_id"] or not inverted_index:
+        app_instance.logger.warning("SearchPlugin: One or more index files are missing or empty. Search may not work.")
+        # It's important that the indexer plugin has run and created these files.
+
+    query_terms = tokenize_and_normalize_query(query_string)
+    if not query_terms:
+        return []
+
+    # Get word_ids for query terms
+    query_word_ids = []
+    for term in query_terms:
+        if term in vocabulary["word_to_id"]:
+            query_word_ids.append(vocabulary["word_to_id"][term])
+        else:
+            app_instance.logger.debug(f"SearchPlugin: Query term '{term}' not in vocabulary.")
+            # Optionally, handle terms not in vocabulary (e.g., ignore, or use for "did you mean")
+
+    if not query_word_ids:
+        app_instance.logger.info("SearchPlugin: No query terms found in vocabulary.")
+        return []
+
+    # Retrieve postings and calculate scores
+    # Score: sum of TFs for matching query terms in a document.
+    # A more advanced score would use TF-IDF.
+    page_scores = defaultdict(float)
+    # To store which query terms hit which page for snippet generation or highlighting (future)
+    page_term_hits = defaultdict(list) 
+
+    for word_id in query_word_ids:
+        word_id_str = str(word_id) # JSON keys are strings
+        if word_id_str in inverted_index:
+            for posting in inverted_index[word_id_str]:
+                page_id = posting.get("page_id")
+                tf = posting.get("tf", 0)
+                page_scores[page_id] += tf # Simple TF-based score accumulation
+                page_term_hits[page_id].append(word_id) # Track which word_id hit this page
+
+    if not page_scores:
+        app_instance.logger.info("SearchPlugin: No pages found matching the query terms.")
+        return []
+
+    # Prepare results
+    results = []
+    for page_id, score in page_scores.items():
+        page_id_str = str(page_id) # JSON keys are strings
+        if page_id_str in page_meta["id_to_slug"]:
+            slug = page_meta["id_to_slug"][page_id_str]
+            # For title, we'd ideally fetch it from the page's frontmatter.
+            # This requires reading the page file, which might be slow for many results.
+            # For now, we'll use the slug as a placeholder or try to get it from page_meta if stored.
+            # A better approach would be to store titles in page_meta during indexing.
+            
+            # Let's try to get title from actual page file (can be slow)
+            page_title = slug.replace('-', ' ').title() # Default title from slug
+            try:
+                page_file_path = get_data_file_path(app_instance, os.path.join(app_instance.config['PAGES_DIR_BASENAME'] , slug + '.md')) # Assuming PAGES_DIR_BASENAME in config
+                if not os.path.exists(page_file_path): # Check if PAGES_DIR_BASENAME is in config
+                     page_file_path = os.path.join(app_instance.config['PAGES_DIR'], slug + '.md')
+
+
+                if os.path.exists(page_file_path):
+                    with open(page_file_path, 'r', encoding='utf-8') as f:
+                        article_fm = frontmatter.load(f)
+                        page_title = article_fm.metadata.get('title', page_title)
+            except Exception as e:
+                app_instance.logger.warning(f"SearchPlugin: Could not read title for page {slug}: {e}")
+
+
+            results.append({
+                "slug": slug,
+                "title": page_title, 
+                "score": score,
+                "url": url_for('view_page', page_name=slug, _external=False) # from main app
+            })
+        else:
+            app_instance.logger.warning(f"SearchPlugin: Page ID {page_id} found in index but not in page_meta['id_to_slug'].")
+
+
+    # Sort results by score, descending
+    results.sort(key=lambda x: x["score"], reverse=True)
+    
+    app_instance.logger.info(f"SearchPlugin: Found {len(results)} results for query '{query_string}'.")
+    return results
+
+
+# --- Flask Route for Search ---
+# This function will be registered as a route by the plugin system
+def search_route(app_instance):
+    query = request.args.get('q', '').strip() # For GET requests (initial load or link with query)
+    results = []
+    
+    if request.method == 'POST': # Handles form submission
+        query = request.form.get('q', '').strip()
+    
+    if query:
+        results = perform_search(app_instance, query)
+        
+    # The template 'html/search_results.html' needs to be created in the main app's templates/html/ dir
+    return render_template('html/search_results.html', query=query, results=results)
+
+
+# --- Plugin Registration ---
+def register(app_instance, register_hook_func):
+    """
+    Registers the plugin's routes and hooks with the Pandoky application.
+    'app_instance' is the Flask app.
+    'register_hook_func' is the 'register_hook' function from app.py (not used by this plugin).
+    """
+    
+    # Add a new Flask route for search
+    # We need to pass app_instance to our route function if it needs app context.
+    # A simple way is to make search_route a closure or use functools.partial.
+    # For simplicity here, we'll define it to accept app_instance.
+    
+    # Define the route function that Flask will call
+    @app_instance.route('/search', methods=['GET', 'POST'])
+    def bound_search_route():
+        # Add PAGES_DIR_BASENAME to config if not present, for constructing page paths
+        # This is a bit of a hack; ideally, the main app provides such utility or config.
+        if 'PAGES_DIR_BASENAME' not in app_instance.config:
+            app_instance.config['PAGES_DIR_BASENAME'] = os.path.basename(app_instance.config['PAGES_DIR'])
+        return search_route(app_instance)
+
+    app_instance.logger.info("SearchPlugin: Registered /search route.")
+
+    # This plugin doesn't currently use any hooks, but it could (e.g., to clear search cache on page save).

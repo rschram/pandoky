@@ -1,0 +1,56 @@
+{# pandoky/templates/html/admin_acl/manage_group_permissions.html #}
+{% extends "html/base_layout.html" %}
+{% block content %}
+    <div class="container">
+
+        <h1>{{ title }}</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flash-messages">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <div class="form-section">
+            <h2>Set Permission for a Custom Group</h2>
+            <form method="POST" action="{{ url_for('.manage_group_permissions') }}">
+                <div class="form-group">
+                    <label for="group_to_set">Group:</label>
+                    <select id="group_to_set" name="group_to_set" required>
+                        <option value="">-- Select Group --</option>
+                        {% for group_name in all_groups_list %}
+                        <option value="{{ group_name }}">{{ group_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="permission_level">Permission Level:</label>
+                    <select id="permission_level" name="permission_level" required>
+                        {% for level_name in permission_levels_list %}
+                        <option value="{{ level_name }}">{{ level_name | capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit">Set Permission</button>
+            </form>
+        </div>
+
+        <div class="current-permissions">
+            <h2>Current Custom Group Permissions</h2>
+            {% if group_permissions_data %}
+                <ul>
+                {% for group_name, permission in group_permissions_data.items() %}
+                    <li><strong>{{ group_name }}:</strong> {{ permission | capitalize }}</li>
+                {% endfor %}
+                </ul>
+            {% else %}
+                <p>No specific permissions set for custom groups. They will use default authenticated/anonymous permissions or have 'none' if not covered.</p>
+            {% endif %}
+        </div>
+        <a href="{{ url_for('.dashboard') }}">Back to ACL Dashboard</a>
+    </div>
+{%endblock%}

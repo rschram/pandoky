@@ -1,0 +1,26 @@
+{# pandoky/templates/html/auth/register.html #}
+{% extends "html/base_layout.html" %}
+{% block content %}
+
+        <form method="POST" action="{{ url_for('auth_plugin.register_route') }}">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" value="{{ username | default('') }}" required autofocus>
+            </div>
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <input type="email" id="email" name="email" value="{{ email | default('') }}" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <div class="form-actions">
+                <button type="submit">Register</button>
+            </div>
+        </form>
+        <div class="login-link">
+            <p>Already have an account? <a href="{{ url_for('auth_plugin.login_route') }}">Log In</a></p>
+        </div>
+    </div>
+{%endblock%}

@@ -1,0 +1,16 @@
+{# pandoky/templates/html/errors/403.html #}
+{% extends "html/base_layout.html" %}
+{% block content %}<!DOCTYPE html>
+    <div class="container">
+        <h1>Access Denied</h1>
+        <p>Sorry, you do not have permission to access this page or perform this action.</p>
+        <p>If you believe this is an error, please contact the site administrator.</p>
+        <div class="actions">
+            <a href="{{ url_for('index') }}" class="home-link">Go to Homepage</a>
+            {% if not current_user %} {# current_user should be available via context processor #}
+                <a href="{{ url_for('auth_plugin.login_route', next=request.url) }}" class="login-link">Login</a>
+            {% endif %}
+        </div>
+        <p class="error-code">Error Code: 403 Forbidden</p>
+    </div>
+{% endblock %}

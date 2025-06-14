@@ -1,0 +1,59 @@
+{% extends "html/base_layout.html" %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold mb-2">{{ title }}</h1>
+    <p class="text-gray-600 mb-6">
+        Automatically group pages based on content similarity and generate descriptive names for each group.
+    </p>
+
+    <!-- Clustering Control Form -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+        <h2 class="text-2xl font-semibold mb-4">Run Clustering</h2>
+        <form method="POST" action="{{ url_for('cluster_plugin.clustering_admin_page') }}">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label for="num_clusters" class="block text-gray-700 font-bold mb-2">Number of Clusters (K):</label>
+                    <input type="number" id="num_clusters" name="num_clusters" value="{{ config.num_clusters }}" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" min="2" max="100">
+                </div>
+                <div>
+                    <label for="num_top_terms" class="block text-gray-700 font-bold mb-2">Terms per Name:</label>
+                    <input type="number" id="num_top_terms" name="num_top_terms" value="{{ config.get('num_top_terms', 3) }}" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" min="1" max="10">
+                </div>
+            </div>
+            <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                Run Clustering and Naming
+            </button>
+        </form>
+    </div>
+
+    <!-- Cluster Results Display -->
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <h2 class="text-2xl font-semibold mb-4">Current Clusters</h2>
+        {% if cluster_data and cluster_data.clusters %}
+            {% set cluster_names = cluster_data.get('cluster_names', {}) %}
+            <p class="mb-4 text-gray-600">Found {{ cluster_data.clusters|length }} clusters.</p>
+            <div class="space-y-4">
+                {% for cluster_id, pages in cluster_data.clusters.items()|sort %}
+                    <div>
+                        <h3 class="text-xl font-semibold text-gray-800">
+                           {{ cluster_names.get(cluster_id, 'Cluster ' + cluster_id) }}
+                        </h3>
+                        <ul class="list-disc list-inside mt-2 ml-4 text-gray-700">
+                            {% for page_slug in pages|sort %}
+                                <li>
+                                    <a href="{{ url_for('view_page', page_name=page_slug) }}" class="text-blue-600 hover:underline">
+                                        {{ page_slug }}
+                                    </a>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-gray-600">No cluster data found. Run the clustering process to generate clusters.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

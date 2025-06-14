@@ -1,0 +1,62 @@
+{# pandoky/templates/html/edit_page.html #}
+{% extends "html/base_layout.html" %}
+{% block content %}
+    <h1>{{ title }}</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flash-messages">
+        {% for category, message in messages %}
+          <li class="{{ category }}">{{ message }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    <form action="{{ url_for('save_page', page_name=page_name) }}" method="POST" id="editForm">
+        <div>
+            <label for="raw_content">Page Content (Markdown with YAML Frontmatter):</label>
+        </div>
+        <div>
+            <textarea name="raw_content" id="raw_content" rows="25">{{ raw_content }}</textarea>
+        </div>
+        <div class="form-actions">
+            <div class="form-actions-main">
+              {% if (page_exists and check_permission('edit_page', page_name)) or (not page_exists and check_permission('create_page', page_name)) %}
+              <button type="submit">Save Page</button>
+              {% endif %}
+                {% if page_exists %}
+                    <a href="{{ url_for('view_page', page_name=page_name) }}" class="cancel-link">Cancel</a>
+                {% else %}
+                    {# If page doesn't exist, "Cancel" means cancel creation, go to home #}
+                    <a href="{{ url_for('index') }}" class="cancel-link">Cancel</a>
+                {% endif %}
+            </div>
+            {% if page_exists and check_permission('delete_page', page_name) %}
+            <div>
+                 <button type="button" class="button-danger" onclick="confirmDelete()">Delete Page</button>
+            </div>
+            {% endif %}
+        </div>
+    </form>
+    
+    {% if page_exists %}
+    <form action="{{ url_for('delete_page', page_name=page_name) }}" method="POST" id="deleteForm" style="display: none;">
+        {# This form is hidden and submitted by JavaScript #}
+    </form>
+    {% endif %}
+
+
+    <script>
+        function confirmDelete() {
+            // Check if page_name is not empty to prevent issues with confirm message
+            var pageNameToConfirm = "{{ page_name }}"; 
+            if (!pageNameToConfirm) {
+                pageNameToConfirm = "this new page"; // Fallback message
+            }
+            if (confirm("Are you sure you want to delete " + pageNameToConfirm + "? This action cannot be undone.")) {
+                document.getElementById('deleteForm').submit();
+            }
+        }
+    </script>
+{% endblock %}

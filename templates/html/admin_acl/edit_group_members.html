@@ -1,0 +1,22 @@
+{# pandoky/templates/html/admin_acl/edit_group_members.html #}
+
+{% extends "html/base_layout.html" %}
+{% block content %}
+    <div class="container">
+
+        <h1>{{ title }}</h1>
+
+        <form method="POST" action="{{ url_for('.edit_group_members', group_name=group_name) }}">
+            <div class="form-group">
+                <label for="members">Members of '{{ group_name }}'</label>
+                <textarea id="members" name="members" rows="5">{{ members | join(', ') }}</textarea>
+                <small>Comma-separated list of usernames.</small>
+            </div>
+            
+            <div class="form-actions">
+                <button type="submit">Save Members</button>
+                <a href="{{ url_for('.manage_groups') }}">Cancel</a>
+            </div>
+        </form>
+    </div>
+{%endblock%}

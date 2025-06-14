@@ -1,0 +1,87 @@
+{# pandoky/templates/html/admin_acl/manage_group_permissions.html #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - Pandoky Admin</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 20px; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1, h2 { margin-bottom: 0.75em; }
+        nav { margin-bottom: 1.5em; padding-bottom: 1em; border-bottom: 1px solid #eee; }
+        nav a { margin-right: 15px; text-decoration: none; color: #007bff; }
+        nav a:hover { text-decoration: underline; }
+        .form-section { margin-bottom: 2em; padding: 1.5em; background-color: #f9f9f9; border-radius: 8px; }
+        .form-group { margin-bottom: 1em; display: flex; align-items: center; gap: 10px;}
+        .form-group label { font-weight: bold; min-width: 100px; }
+        .form-group select { padding: 8px; font-size: 1em; border: 1px solid #ccc; border-radius: 4px; min-width: 180px; }
+        .form-group button { padding: 8px 15px; font-size: 1em; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .current-permissions { margin-top: 1em; }
+        .current-permissions ul { list-style-type: none; padding-left: 0; }
+        .current-permissions li { background-color: #fff; border: 1px solid #eee; padding: 8px; margin-bottom: 5px; border-radius: 4px; }
+        .flash-messages { list-style-type: none; padding: 0; margin-bottom: 1em;}
+        .flash-messages li { padding: 10px; border-radius: 4px; margin-bottom: 10px; }
+        .flash-messages li.success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;}
+        .flash-messages li.error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav>
+            <a href="{{ url_for('index') }}">Main Site Home</a> |
+            <a href="{{ url_for('.dashboard') }}">ACL Dashboard</a>
+        </nav>
+
+        <h1>{{ title }}</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flash-messages">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <div class="form-section">
+            <h2>Set Permission for a Custom Group</h2>
+            <form method="POST" action="{{ url_for('.manage_group_permissions') }}">
+                <div class="form-group">
+                    <label for="group_to_set">Group:</label>
+                    <select id="group_to_set" name="group_to_set" required>
+                        <option value="">-- Select Group --</option>
+                        {% for group_name in all_groups_list %}
+                        <option value="{{ group_name }}">{{ group_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="permission_level">Permission Level:</label>
+                    <select id="permission_level" name="permission_level" required>
+                        {% for level_name in permission_levels_list %}
+                        <option value="{{ level_name }}">{{ level_name | capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit">Set Permission</button>
+            </form>
+        </div>
+
+        <div class="current-permissions">
+            <h2>Current Custom Group Permissions</h2>
+            {% if group_permissions_data %}
+                <ul>
+                {% for group_name, permission in group_permissions_data.items() %}
+                    <li><strong>{{ group_name }}:</strong> {{ permission | capitalize }}</li>
+                {% endfor %}
+                </ul>
+            {% else %}
+                <p>No specific permissions set for custom groups. They will use default authenticated/anonymous permissions or have 'none' if not covered.</p>
+            {% endif %}
+        </div>
+        <a href="{{ url_for('.dashboard') }}">Back to ACL Dashboard</a>
+    </div>
+</body>
+</html>

@@ -1,0 +1,96 @@
+{# pandoky/templates/html/admin_acl/manage_groups.html #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - Pandoky Admin</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 20px; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1, h2 { margin-bottom: 0.75em; }
+        nav { margin-bottom: 1.5em; padding-bottom: 1em; border-bottom: 1px solid #eee; }
+        nav a { margin-right: 15px; text-decoration: none; color: #007bff; }
+        nav a:hover { text-decoration: underline; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 2em; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #f0f0f0; }
+        .actions a, .actions button { margin-right: 8px; text-decoration: none; padding: 5px 10px; border-radius: 4px; font-size: 0.9em; cursor: pointer;}
+        .actions .edit-btn { background-color: #ffc107; color: #212529; border: none; }
+        .actions .delete-btn { background-color: #dc3545; color: white; border: none; }
+        .form-section { margin-bottom: 2em; padding: 1.5em; background-color: #f9f9f9; border-radius: 8px; }
+        .form-group { margin-bottom: 1em; }
+        .form-group label { display: block; margin-bottom: 0.5em; font-weight: bold; }
+        .form-group input[type="text"] { width: 100%; max-width: 400px; padding: 8px; font-size: 1em; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .form-group button { padding: 8px 15px; font-size: 1em; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .flash-messages { list-style-type: none; padding: 0; margin-bottom: 1em;}
+        .flash-messages li { padding: 10px; border-radius: 4px; margin-bottom: 10px; }
+        .flash-messages li.success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;}
+        .flash-messages li.error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav>
+            <a href="{{ url_for('index') }}">Main Site Home</a> |
+            <a href="{{ url_for('.dashboard') }}">ACL Dashboard</a>
+        </nav>
+
+        <h1>{{ title }}</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flash-messages">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <div class="form-section">
+            <h2>Add New Custom Group</h2>
+            <form method="POST" action="{{ url_for('.manage_groups') }}">
+                <input type="hidden" name="action" value="add_group">
+                <div class="form-group">
+                    <label for="new_group_name">Group Name:</label>
+                    <input type="text" id="new_group_name" name="new_group_name" required pattern="^[a-zA-Z0-9_-]+$" title="Only letters, numbers, underscores, hyphens.">
+                </div>
+                <button type="submit">Create Group</button>
+            </form>
+        </div>
+
+        <h2>Existing Custom Groups</h2>
+        {% if groups_data %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Group Name</th>
+                        <th>Members</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for group_name, members in groups_data.items() %}
+                    <tr>
+                        <td>{{ group_name }}</td>
+                        <td>{{ members | join(', ') if members else 'No members' }}</td>
+                        <td class="actions">
+                            <a href="{{ url_for('.edit_group_members', group_name=group_name) }}" class="edit-btn">Edit Members</a>
+                            <form action="{{ url_for('.manage_groups') }}" method="POST" style="display:inline;">
+                                <input type="hidden" name="action" value="delete_group">
+                                <input type="hidden" name="group_to_delete" value="{{ group_name }}">
+                                <button type="submit" class="delete-btn" onclick="return confirm('Are you sure you want to delete group \'{{ group_name }}\'? This will also remove its permission setting.');">Delete Group</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No custom groups defined yet.</p>
+        {% endif %}
+         <a href="{{ url_for('.dashboard') }}">Back to ACL Dashboard</a>
+    </div>
+</body>
+</html>

@@ -1,0 +1,55 @@
+{# pandoky/templates/html/media_manager/manage_media.html #}
+{% extends "html/base_layout.html" %}
+{% block content %}
+    <div class="container">
+
+        <h1>{{ title }}</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flash-messages">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <div class="section upload-form">
+            <h2>Upload New Media File</h2>
+            <form method="POST" enctype="multipart/form-data" action="{{ url_for('.manage_media_files') }}">
+                <input type="file" name="mediafile" accept="{{ app.config.get('ALLOWED_MEDIA_EXTENSIONS', []) | join(',') }}" required>
+                <button type="submit">Upload File</button>
+            </form>
+            <p><small>Allowed file types: {{ app.config.get('ALLOWED_MEDIA_EXTENSIONS', []) | join(', ') }}</small></p>
+        </div>
+
+        <div class="section">
+            <h2>Existing Media Files</h2>
+            {% if files %}
+                <div class="media-grid">
+                {% for file_info in files %}
+                    <div class="media-item">
+                        {% set ext = file_info.name.rsplit('.', 1)[1].lower() %}
+                        {% if ext in ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'] %}
+                            <img src="{{ file_info.url }}" alt="{{ file_info.name }}">
+                        {% elif ext in ['mp4', 'webm', 'ogg'] %}
+                            <video controls width="150"><source src="{{ file_info.url }}" type="video/{{ ext if ext != 'ogg' else 'ogg; codecs=theora,vorbis' }}"></video>
+                        {% else %}
+                            <p>[Preview not available for .{{ ext }}]</p>
+                        {% endif %}
+                        <div class="filename"><a href="{{ file_info.url }}" target="_blank">{{ file_info.name }}</a></div>
+                        <div class="actions">
+                            <form action="{{ url_for('.delete_media_file_admin', filename=file_info.name) }}" method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete \'{{ file_info.name }}\'?');">
+                                <button type="submit">Delete</button>
+                            </form>
+                        </div>
+                    </div>
+                {% endfor %}
+                </div>
+            {% else %}
+                <p>No media files found in <code>{{ app.config.get('MEDIA_DIR', 'data/media/') }}</code>.</p>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

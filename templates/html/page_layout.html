@@ -1,0 +1,50 @@
+{# pandoky/templates/html/page_layout.html #}
+{% extends "html/base_layout.html" %}
+{% block content %}
+
+<div class="content-wrapper">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <ul class="flash-messages">
+    {% for category, message in messages %}
+    <li class="{{ category }}">{{ message }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% endwith %}
+
+  <header>
+    {% if 'doctype' in frontmatter and frontmatter.doctype %}
+    <p class="doctype">{{ frontmatter.doctype | markdown }}</p>
+    {% endif %}
+    <h1 class="title">{{ title | markdown }}</h1>
+    {% if 'subtitle' in frontmatter and frontmatter.subtitle %}
+    <h2 class="subtitle">{{ frontmatter.subtitle | markdown }}</h2>
+    {% endif %}
+    <p class="byline">
+      {% if 'author' in frontmatter and frontmatter.author %}
+      <span class="author">{{ frontmatter.author | markdown }}</span>
+      {% else %}
+      <span class="author"></span>
+      {% endif %}
+      {% if frontmatter.date %}
+      <span class="date">{{ frontmatter.date | anydate("%b %d, %Y") }}</span>
+      {% endif %}
+    </p>
+  </header>
+
+  {% if page_name %} {# Only show edit link if on a viewable page #}
+  {% if check_permission('edit_page', page_name) %}
+  <nav class="page">
+    <ul class="page-actions">
+      <li><a href="{{ url_for('edit_page', page_name=page_name) }}">Edit Page</a></li>
+    </ul>
+  </nav>
+  {% endif %}
+  {% endif %}
+  <main>
+    {{ html_content | absolutize(page_name) | safe }}
+  </main>
+  {% endblock %}
+</div>

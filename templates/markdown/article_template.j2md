@@ -1,0 +1,51 @@
+---
+{# This YAML block is part of the Markdown that will be fed to Pandoc. #}
+{# It uses values from the original file's frontmatter, or sets defaults. #}
+title: "{{ frontmatter.title | default(page_name | replace('-', ' ') | title) }}"
+author: "{{ frontmatter.author | default('Pandoky User') }}"
+{# Use the anydate filter for formatting the date string from frontmatter #}
+date: "{{ frontmatter.date | anydate("%B %e, %Y") }}" 
+
+{# Bibliography and CSL settings for Pandoc #}
+{# Pandoc expects paths relative to where it's run, or absolute paths. #}
+{# We construct absolute paths here for robustness. #}
+{% if frontmatter.bibliography %}
+bibliography: "{{ config.BIB_DIR }}/{{ frontmatter.bibliography }}"
+{% elif frontmatter.citations is defined and config.DEFAULT_BIBLIOGRAPHY_FILE %}
+bibliography: "{{ config.DEFAULT_BIBLIOGRAPHY_FILE }}"
+{% endif %}
+
+{% if frontmatter.csl %}
+csl: "{{ config.CSL_DIR }}/{{ frontmatter.csl }}"
+{% elif frontmatter.citations is defined and config.DEFAULT_CSL_FILE %}
+csl: "{{ config.DEFAULT_CSL_FILE }}"
+{% endif %}
+
+{# You can add other Pandoc metadata options here #}
+{# e.g., lang, abstract, keywords, header-includes #}
+{% if frontmatter.abstract %}
+abstract: |
+  {{ frontmatter.abstract | indent(2) }}
+{% endif %}
+
+{% if frontmatter.keywords %}
+keywords: [{% for keyword in frontmatter.keywords %}"{{ keyword }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+{% endif %}
+
+{# Example for adding custom header includes for Pandoc #}
+{% if frontmatter.header_includes %}
+header-includes: |
+  {{ frontmatter.header_includes | indent(2) }}
+{% endif %}
+---
+
+{# This is the main Markdown body from the original .md file's content section #}
+{{ body }}
+
+{# Example: Dynamically add a section based on frontmatter #}
+{% if frontmatter.show_custom_footer %}
+
+---
+*This article was processed by Pandoky on {{ "now" | anydate("%B %e, %Y") }}.*
+*Source page: {{ page_name }}.md*
+{% endif %}

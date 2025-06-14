@@ -1,0 +1,78 @@
+{# pandoky/templates/html/admin_acl/manage_users.html #}
+{% extends "html/base_layout.html" %}
+{% block content %}
+    <div class="container">
+
+        <h1>{{ title }}</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flash-messages">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <div class="form-section">
+            <h2>Add New User</h2>
+            <form method="POST" action="{{ url_for('.add_user_admin') }}">
+                <div class="form-group">
+                    <label for="username">Username:</label>
+                    <input type="text" id="username" name="username" required pattern="^[a-zA-Z0-9]+$" title="Alphanumeric only">
+                </div>
+                <div class="form-group">
+                    <label for="email">Email:</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password:</label>
+                    <input type="password" id="password" name="password" required>
+                     <small>Password requirements from auth plugin will apply if stricter.</small>
+                </div>
+                <div class="form-group">
+                    <input type="checkbox" id="is_verified" name="is_verified" value="on" checked>
+                    <label for="is_verified" style="display: inline; font-weight: normal;">Verified (user can log in immediately)</label>
+                </div>
+                <button type="submit">Create User</button>
+            </form>
+        </div>
+
+        <h2>Existing Users</h2>
+        {% if users %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Verified</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.username }}</td>
+                        <td>{{ user.email }}</td>
+                        <td>{{ 'Yes' if user.is_verified else 'No' }}</td>
+                        <td class="actions">
+                            {% if user.username != g.current_user %} {# Prevent admin from deleting self via this UI #}
+                            <form action="{{ url_for('.delete_user_admin', username_to_delete=user.username) }}" method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete user \'{{ user.username }}\'? This will also remove them from groups and ACL rules.');">
+                                <button type="submit">Delete</button>
+                            </form>
+                            {% else %}
+                                (Current Admin)
+                            {% endif %}
+                            {# Edit user link can be added here later #}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No users found (except potentially the current admin if not listed).</p>
+        {% endif %}
+         <a href="{{ url_for('.dashboard') }}">Back to ACL Editor Dashboard</a>
+    </div>
+{%endblock%}
