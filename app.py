@@ -136,7 +136,7 @@ def absolutize_internal_links(html_content, page_name=None):
         return Markup(absolute_html)
     except Exception as e:
         # In case url_for fails for any reason, log it and return original content
-        current_app.logger.error(f"Error in absolutize_internal_links filter: {e}")
+        app.logger.error(f"Error in absolutize_internal_links filter: {e}")
         return html_content
 
 # --- Jinja2 Environment for Markdown Templates ---
@@ -210,11 +210,9 @@ def render_markdown_from_template(template_name, **context):
 @app.errorhandler(403)
 def forbidden_page(error):
     return render_template('html/errors/403.html', error=error), 403
-
 @app.errorhandler(404)
 def page_not_found_error(error): 
     return render_template('html/errors/404.html', error=error), 404
-
 @app.route('/favicon.ico')
 def favicon():
     return '', 204
@@ -238,8 +236,9 @@ def index():
         app.logger.info(f"Home page not found or error: {e}")
         return "Welcome to Pandoky! Create 'data/pages/home.md' to get started.", 200
 
-@app.route('/<path:page_name>')
-def view_page(page_name):
+# -- View page helper functions --
+def _get_page_data(page_name):
+    """Retrieve data for the given page."""
     page_extension = app.config['PAGE_EXTENSION']
     normalized_page_name = '/'.join(slugify(part) for part in filter(None, page_name.split('/')))
     if page_name != normalized_page_name:
@@ -247,10 +246,13 @@ def view_page(page_name):
         return redirect(url_for('view_page', page_name=normalized_page_name), code=308)
     page_name = normalized_page_name
 
-
     try:
         page_file_path = safe_join(app.config['PAGES_DIR'], page_name + page_extension)
         page_name = trigger_hook('before_page_file_access', page_name, page_file_path=page_file_path, app_context=app)
+
+        if page_file_path is None:
+            app.logger.error(f"Resolved page_file_path does not exist for page: {page_name}. Check the configuration settings.")
+            return redirect(url_for('edit_page', page_name=page_name), code=308)
 
         if not os.path.exists(page_file_path) or not os.path.isfile(page_file_path):
             app.logger.warning(f"Page file not found: {page_file_path}. Redirecting to edit page.")
@@ -261,12 +263,39 @@ def view_page(page_name):
         
         original_frontmatter = article.metadata
         original_markdown_body = article.content
-
         hook_data = {'frontmatter': original_frontmatter, 'body': original_markdown_body, 'page_name': page_name}
         modified_data = trigger_hook('after_page_load', hook_data, app_context=app)
+        if modified_data:
+            return modified_data, page_name
+        else:
+            return hook_data, page_name
+    except PermissionError as e: 
+        flash(str(e), "error")
+        app.logger.warning(f"ACL Permission denied for viewing page {page_name}: {e}")
+        user_in_session = session.get('current_user', None) 
+        if user_in_session is None:
+            return redirect(url_for('auth_plugin.login_route', next=request.url))
+        else:
+            abort(403) 
+    except FileNotFoundError: 
+        app.logger.error(f"File not found for page: {page_name}")
+        abort(404) 
+    except RuntimeError as e: 
+        app.logger.error(f"Conversion error for page {page_name}: {e}")
+        flash(f"The page '{page_name}' could not be displayed due to a rendering error. Please fix the issue below. (Details: {e})", "error")
+        return redirect(url_for('edit_page', page_name=page_name))
+    except Exception as e:
+        app.logger.error(f"Unexpected error for page {page_name}: {e}", exc_info=True)
+        flash(f"The page '{page_name}' could not be displayed due to an unexpected error. Please fix the issue below. (Details: {e})", "error")
+        return redirect(url_for('edit_page', page_name=page_name))
+
+
+def _process_markdown_content(modified_data,page_name):
+    """Process markdown content with hooks/macros."""
+    try: 
         if modified_data: 
-             original_frontmatter = modified_data.get('frontmatter', original_frontmatter)
-             original_markdown_body = modified_data.get('body', original_markdown_body)
+            original_frontmatter = modified_data.get('frontmatter', {}) if modified_data else {}
+            original_markdown_body = modified_data.get('body', '') if modified_data else ''
 
         md_render_context = {
             'frontmatter': original_frontmatter,
@@ -291,6 +320,19 @@ def view_page(page_name):
         pandoc_input_body_with_wikilinks = trigger_hook('after_wikilink_conversion', pandoc_input_body_with_wikilinks, frontmatter=pandoc_input_frontmatter, app_context=app)
 
         final_markdown_for_pandoc = f"---\n{yaml.dump(pandoc_input_frontmatter, sort_keys=False, allow_unicode=True)}---\n\n{pandoc_input_body_with_wikilinks}"
+        return final_markdown_for_pandoc
+    except RuntimeError as e: 
+        app.logger.error(f"Conversion error for page {page_name}: {e}")
+        flash(f"The page '{page_name}' could not be displayed due to a rendering error. Please fix the issue below. (Details: {e})", "error")
+        return redirect(url_for('edit_page', page_name=page_name))
+    except Exception as e:
+        app.logger.error(f"Unexpected error for page {page_name}: {e}", exc_info=True)
+        flash(f"The page '{page_name}' could not be displayed due to an unexpected error. Please fix the issue below. (Details: {e})", "error")
+        return redirect(url_for('edit_page', page_name=page_name))
+
+def _render_page_html(final_markdown_for_pandoc, page_name, page_title, original_frontmatter):
+    """Convert processed markdown to HTML using Pandoc."""
+    try:
         
         pandoc_args = app.config['PANDOC_ARGS']
         
@@ -304,8 +346,6 @@ def view_page(page_name):
         )
         
         html_content_fragment = trigger_hook('after_pandoc_conversion', html_content_fragment, page_name=page_name, app_context=app)
-
-        page_title = original_frontmatter.get('title', page_name.replace('/', ' / ').title()) 
         
         render_context = {
             'title': page_title,
@@ -318,17 +358,6 @@ def view_page(page_name):
         
         return render_template('html/page_layout.html', **render_context)
 
-    except PermissionError as e: 
-        flash(str(e), "error")
-        app.logger.warning(f"ACL Permission denied for viewing page {page_name}: {e}")
-        user_in_session = session.get('current_user', None) 
-        if user_in_session is None:
-            return redirect(url_for('auth_plugin.login_route', next=request.url))
-        else:
-            abort(403) 
-    except FileNotFoundError: 
-        app.logger.error(f"File not found for page: {page_name}")
-        abort(404) 
     except RuntimeError as e: 
         app.logger.error(f"Conversion error for page {page_name}: {e}")
         flash(f"The page '{page_name}' could not be displayed due to a rendering error. Please fix the issue below. (Details: {e})", "error")
@@ -337,6 +366,21 @@ def view_page(page_name):
         app.logger.error(f"Unexpected error for page {page_name}: {e}", exc_info=True)
         flash(f"The page '{page_name}' could not be displayed due to an unexpected error. Please fix the issue below. (Details: {e})", "error")
         return redirect(url_for('edit_page', page_name=page_name))
+# ----
+
+@app.route('/<path:page_name>')
+def view_page(page_name):
+    result = _get_page_data(page_name)
+
+    if not isinstance(result, tuple):
+        return result  # It's a redirect or abort
+    modified_data, final_page_name = result
+
+    page_title = modified_data.get('frontmatter', {}).get('title', page_name.replace('/', ' / ').title()) 
+    final_markdown_for_pandoc = _process_markdown_content(modified_data, final_page_name)
+
+    return _render_page_html(final_markdown_for_pandoc, final_page_name, page_title, original_frontmatter=modified_data.get('frontmatter', {}))
+
 
 
 @app.route('/<path:page_name>/edit', methods=['GET'])

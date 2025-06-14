@@ -8,12 +8,12 @@
 
 *These tasks make the application robust, maintainable, and fix fundamental issues. They should be completed before major new features are added.*
 
-1.  **Refactoring the `view_page` function for clarity and maintainability.**
-    * [ ] **Subtask 1:** Create new helper function stubs: `_get_page_data`, `_process_markdown_content`, and `_render_page_html`.
-    * [ ] **Subtask 2:** Isolate data retrieval logic into `_get_page_data`.
-    * [ ] **Subtask 3:** Isolate Markdown hook processing into `_process_markdown_content`.
-    * [ ] **Subtask 4:** Isolate Pandoc HTML conversion and its error handling into `_render_page_html`.
-    * [ ] **Subtask 5:** Rewrite `view_page` to be a lean "controller" that orchestrates the calls to the new helper functions.
+1.  ~~Refactoring the `view_page` function for clarity and maintainability.~~
+    * [X] **Subtask 1:** Create new helper function stubs: `_get_page_data`, `_process_markdown_content`, and `_render_page_html`.
+    * [X] **Subtask 2:** Isolate data retrieval logic into `_get_page_data`.
+    * [X] **Subtask 3:** Isolate Markdown hook processing into `_process_markdown_content`.
+    * [X] **Subtask 4:** Isolate Pandoc HTML conversion and its error handling into `_render_page_html`.
+    * [X] **Subtask 5:** Rewrite `view_page` to be a lean "controller" that orchestrates the calls to the new helper functions.
 
 2.  **Implement Advisory File Locking to prevent edit conflicts.**
     * [ ] Design a system to create a `.lock` file when a user begins editing a page.
