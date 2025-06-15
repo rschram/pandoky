@@ -15,10 +15,10 @@
     * [X] **Subtask 4:** Isolate Pandoc HTML conversion and its error handling into `_render_page_html`.
     * [X] **Subtask 5:** Rewrite `view_page` to be a lean "controller" that orchestrates the calls to the new helper functions.
 
-2.  **Implement Advisory File Locking to prevent edit conflicts.**
-    * [ ] Design a system to create a `.lock` file when a user begins editing a page.
-    * [ ] Before rendering the edit page, check for a lock file and show a "page is locked" message if it exists.
-    * [ ] Ensure the lock file is deleted when a page is saved or when the user cancels the edit.
+2.  ~~Implement Advisory File Locking to prevent edit conflicts.~~
+    * [X] Design a system to create a `.lock` file when a user begins editing a page.
+    * [X] Before rendering the edit page, check for a lock file and show a "page is locked" message if it exists.
+    * [X] Ensure the lock file is deleted when a page is saved or when the user cancels the edit.
 
 3.  **Redirecting a user to the last page seen after login.**
     * [ ] Review all redirects to the login page and ensure the `next=request.url` parameter is passed.
