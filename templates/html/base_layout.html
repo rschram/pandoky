@@ -37,9 +37,9 @@
             <li><a href="{{ url_for('redirect_to_admin_dashboard') }}">Admin</a></li>
             {% endif %}
             {% if current_user %}
-            <li><a href="{{ url_for('auth_plugin.logout_route') }}">Logout</a></li>
+            <li><a href="{{ url_for('auth_plugin.logout_route')}}">Logout</a></li>
             {% else %}
-            <li><a href="{{ url_for('auth_plugin.login_route') }}">Login</a></li>
+            <li><a href="{{ url_for('auth_plugin.login_route')}}">Login</a></li>
             <li><a href="{{ url_for('auth_plugin.register_route') }}">Register</a></li>
             {% endif %}
             <li class="nav-search-item">

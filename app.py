@@ -407,16 +407,17 @@ def edit_page(page_name):
                  flash(f"You do not have permission to {required_action.replace('_page', '')} this page.", "error")
                  abort(403)
 
-        if os.path.exists(f"{page_file_path}.lock"):
-            with open(f"{page_file_path}.lock", 'r', encoding='utf-8') as lock_file:
+        lockpage = f"{os.path.basename(page_file_path)}.lock"
+        if os.path.exists(lockpage):
+            with open(lockpage, 'r', encoding='utf-8') as lock_file:
                 lock_content = lock_file.read()
             flash(f"This page is currently locked for editing by another user. {lock_content}", "warning")
             app.logger.warning(f"Page {page_name} is locked for editing: {lock_content}.")
             return redirect(url_for('view_page', page_name=page_name))
         else:
-            with open(f"{page_file_path}.lock", 'w', encoding='utf-8') as lock_file:
+            with open(lockpage, 'w', encoding='utf-8') as lock_file:
                 lock_file.write(f"Editing {page_name} by {g.get('current_user', 'unknown user')} at {datetime.now().isoformat()}\n")
-            app.logger.info(f"Lock file created for editing page: {page_file_path}.lock")
+            app.logger.info(f"Lock file created for editing page: {lockpage}")
 
         default_title = page_name.replace('/', ' / ').title() 
         default_date = datetime.now().strftime('%Y-%m-%d') 
@@ -478,8 +479,10 @@ def save_page(page_name):
         app.logger.info(f"Page saved: {page_file_path}")
         
         trigger_hook('after_page_save', page_name, file_path=page_file_path, app_context=app)
-        os.remove(f"{page_file_path}.lock")  # Remove the lock file after saving
-        app.logger.info(f"Lock file removed for page: {page_file_path}.lock")
+        
+        lockpage = f"{os.path.basename(page_file_path)}.lock"
+        os.remove(lockpage)  # Remove the lock file after saving
+        app.logger.info(f"Lock file removed for page: {page_name}.lock")
 
         return redirect(url_for('view_page', page_name=page_name))
     except PermissionError as e: 
