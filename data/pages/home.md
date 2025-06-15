@@ -6,7 +6,7 @@ bibliography: "file"
 ---
 
 # Pandoky: A vibe-coded, Pandoc-based, Dokuwiki-inspired, flat-file, wiki-like CMS coded in Python
-
+ 
 ![Figure 1. Current mood.](vibe.jpg "A Frinkiac.com screengrab from an episode of The Simpsons. Marge enters the living room to find Homer on the couch with a small blue bird pecking at the three hairs on his head. In the original episode, Homer replies to Marge, &ldquo;He's grooming me.&rdquo; In this altered image, the caption reads &ldquo;I vibe-coded it.&rdquo; Same, Homer. Same...")
 
 Pandoky is a lightweight, flat-file based Content Management System (CMS) inspired by DokuWiki, built using Python, Flask, and Pandoc. It allows for easy creation and management of Markdown-based wiki pages with a focus on extensibility through a plugin architecture. All code was created in an interactive chat session with Google Gemini 2.5 pro (preview). The AI followed the instructions given by a human creator, starting with the prompt, 
