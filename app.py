@@ -92,6 +92,7 @@ def load_plugins():
             except Exception as e:
                 app.logger.error(f"Failed to load plugin package {module_name}: {e}", exc_info=True)
 
+
 load_plugins()
 trigger_hook('app_initialized', app=app) 
 
@@ -523,11 +524,12 @@ def save_page(page_name):
         
         trigger_hook('after_page_save', page_name, file_path=page_file_path, app_context=app)
         
-        #--Old locking mechanism--
-        lockpage = f"{os.path.basename(page_file_path)}.lock"
-        os.remove(lockpage)  # Remove the lock file after saving
-        app.logger.info(f"Lock file removed for page: {page_name}.lock")
-        #--
+        # Use the helper function to find and remove the lock
+        lock_path = _get_lock_path(page_name)
+        if os.path.exists(lock_path):
+            os.remove(lock_path)
+            app.logger.info(f"Lock file removed upon save for page: {page_name}")
+
         return redirect(url_for('view_page', page_name=page_name))
     except PermissionError as e: 
         flash(str(e), "error")
@@ -635,8 +637,8 @@ def serve_media_file(filename):
 
 
 if __name__ == '__main__':
-#    load_plugins()
-#    trigger_hook('app_initialized', app=app) 
+    #load_plugins()
+    trigger_hook('app_initialized', app=app) 
 
     try:
         pypandoc.get_pandoc_version()
