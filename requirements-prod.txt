@@ -1,0 +1,7 @@
+# requirements-prod.txt
+
+# Include all the base application requirements
+-r requirements.txt
+
+# Add production-specific dependencies
+gunicorn
