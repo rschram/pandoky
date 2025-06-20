@@ -33,7 +33,7 @@
           <!-- Site-wide actions like Home, Index, Admin -->
           <ul class="site-actions" data-label="Site actions:">
             <li><span class="user-greeting">Logged in as: <strong>{{ current_user }}</strong></span></li>
-            {% if check_permission('admin_site') %}
+            {% if acl_check_permission('admin_site') %}
             <li><a href="{{ url_for('redirect_to_admin_dashboard') }}">Admin</a></li>
             {% endif %}
             {% if current_user %}
