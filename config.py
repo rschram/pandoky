@@ -6,6 +6,8 @@ FLASK_SECRET_KEY = os.environ.get('','shh')
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = 'data'
 PAGES_DIR = os.path.join(DATA_DIR, 'pages')
+LOCKS_DIR = os.path.join(DATA_DIR, 'locks')
+LOCK_TIMEOUT = 1800 # Lock timeout in seconds (1800 = 30 minutes)
 BIB_DIR = os.path.join(DATA_DIR, 'bibliographies')
 CSL_DIR = os.path.join(DATA_DIR, 'csl')
 CACHE_DIR = os.path.join(APP_ROOT, 'cache') # For storing rendered HTML

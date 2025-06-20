@@ -366,6 +366,17 @@ def _render_page_html(final_markdown_for_pandoc, page_name, page_title, original
         app.logger.error(f"Unexpected error for page {page_name}: {e}", exc_info=True)
         flash(f"The page '{page_name}' could not be displayed due to an unexpected error. Please fix the issue below. (Details: {e})", "error")
         return redirect(url_for('edit_page', page_name=page_name))
+
+def _get_lock_path(page_name_slug):
+    """
+    Converts a page slug into a safe, absolute path for a lock file
+    in the centralized LOCKS_DIR.
+    """
+    # 'new-project/meeting-notes' -> 'new-project__meeting-notes.lock'
+    safe_slug = page_name_slug.replace('/', '__')
+    lock_filename = f"{safe_slug}.lock"
+    return os.path.join(app.config['LOCKS_DIR'], lock_filename)
+
 # ----
 
 @app.route('/<path:page_name>')
@@ -407,49 +418,78 @@ def edit_page(page_name):
                  flash(f"You do not have permission to {required_action.replace('_page', '')} this page.", "error")
                  abort(403)
 
-        lockpage = f"{os.path.basename(page_file_path)}.lock"
-        if os.path.exists(lockpage):
-            with open(lockpage, 'r', encoding='utf-8') as lock_file:
-                lock_content = lock_file.read()
-            flash(f"This page is currently locked for editing by another user. {lock_content}", "warning")
-            app.logger.warning(f"Page {page_name} is locked for editing: {lock_content}.")
-            return redirect(url_for('view_page', page_name=page_name))
-        else:
-            with open(lockpage, 'w', encoding='utf-8') as lock_file:
-                lock_file.write(f"Editing {page_name} by {g.get('current_user', 'unknown user')} at {datetime.now().isoformat()}\n")
-            app.logger.info(f"Lock file created for editing page: {lockpage}")
+        lock_path = _get_lock_path(page_name)
+        locks_dir = app.config['LOCKS_DIR']
+        lock_timeout_seconds = app.config.get('LOCK_TIMEOUT', 1800)
 
-        default_title = page_name.replace('/', ' / ').title() 
-        default_date = datetime.now().strftime('%Y-%m-%d') 
-        
-        if page_exists_check: 
-            with open(page_file_path, 'r', encoding='utf-8') as f:
-                raw_content = f.read()
-        else: 
-            raw_content = (
-                f"---\n"
-                f"doctype: \"Article\"\n"
-                f"title: \"{default_title}\"\n"
-                f"#subtitle: \"[...]\"\n"
-                f"date: \"{default_date}\"\n"
-                f"author: \"{g.get('current_user', 'Your Name')}\"\n"
-                f"references-section-title: \"References\"\n"
-                f"---\n\n"
-                f"Start writing content for {default_title} here..."
-            )
-        
-        edit_page_data = {'page_name': page_name, 'raw_content': raw_content, 'title': f"Edit {default_title}", 'page_exists': page_exists_check}
-        edit_page_data = trigger_hook('before_edit_page_render', dict(edit_page_data), app_context=app)
-            
-        return render_template('html/edit_page.html', **edit_page_data)
+        # Ensure the central locks directory exists
+        os.makedirs(locks_dir, exist_ok=True)
+
+        if os.path.exists(lock_path):
+            try:
+                with open(lock_path, 'r', encoding='utf-8') as f:
+                    # Expected format: ISO_timestamp;username
+                    lock_timestamp_str, lock_user = f.read().strip().split(';', 1)
+                    lock_time = datetime.fromisoformat(lock_timestamp_str)
+
+                time_since_lock = (datetime.now() - lock_time).total_seconds()
+                
+                # Check if the lock is stale (expired)
+                if time_since_lock > lock_timeout_seconds:
+                    app.logger.warning(f"Stale lock for '{page_name}' held by '{lock_user}' found and removed.")
+                    os.remove(lock_path) # Remove the stale lock
+                # If the lock is fresh and held by someone else
+                elif lock_user != g.get('current_user', 'anonymous'):
+                    flash(f"This page is currently locked for editing by '{lock_user}'. The lock will expire in approximately {int((lock_timeout_seconds - time_since_lock) / 60)} minutes.", "warning")
+                    return redirect(url_for('view_page', page_name=page_name))
+                # The lock is fresh and held by the current user, so we let them proceed.
+            except Exception as e:
+                app.logger.error(f"Could not read or parse lock file {lock_path}: {e}. Removing corrupt lock.")
+                os.remove(lock_path)
+
+        # Create a new lock file (or recreate a stale one)
+        try:
+            with open(lock_path, 'w', encoding='utf-8') as f:
+                # Store timestamp and user, separated by a semicolon
+                f.write(f"{datetime.now().isoformat()};{g.get('current_user', 'anonymous')}")
+            app.logger.info(f"Lock created for page '{page_name}' at {lock_path}")
+        except Exception as e:
+            app.logger.error(f"Failed to create lock file for '{page_name}': {e}")
+            flash("Could not acquire an edit lock for this page. Please try again.", "error")
+            return redirect(url_for('view_page', page_name=page_name))
     except PermissionError as e: 
         flash(str(e), "error")
         app.logger.warning(f"ACL Permission denied for editing page {page_name}: {e}")
-        if g.get('current_user') is None: return redirect(url_for('auth_plugin.login_route', next=request.url))
-        else: abort(403)
-    except Exception as e:
-        app.logger.error(f"Error loading edit page for {page_name}: {e}", exc_info=True)
-        abort(500, description="Could not load the page for editing.")
+        if g.get('current_user') is None:
+            return redirect(url_for('auth_plugin.login_route', next=url_for('edit_page', page_name=page_name)))
+        else:
+            return redirect(url_for('view_page', page_name=page_name))
+
+ 
+
+    default_title = page_name.replace('/', ' / ').title() 
+    default_date = datetime.now().strftime('%Y-%m-%d') 
+    
+    if page_exists_check: 
+        with open(page_file_path, 'r', encoding='utf-8') as f:
+            raw_content = f.read()
+    else: 
+        raw_content = (
+            f"---\n"
+            f"doctype: \"Article\"\n"
+            f"title: \"{default_title}\"\n"
+            f"#subtitle: \"[...]\"\n"
+            f"date: \"{default_date}\"\n"
+            f"author: \"{g.get('current_user', 'Your Name')}\"\n"
+            f"references-section-title: \"References\"\n"
+            f"---\n\n"
+            f"Start writing content for {default_title} here..."
+        )
+    
+    edit_page_data = {'page_name': page_name, 'raw_content': raw_content, 'title': f"Edit {default_title}", 'page_exists': page_exists_check}
+    edit_page_data = trigger_hook('before_edit_page_render', dict(edit_page_data), app_context=app)
+        
+    return render_template('html/edit_page.html', **edit_page_data)
 
 @app.route('/<path:page_name>/save', methods=['POST'])
 def save_page(page_name):
@@ -480,10 +520,11 @@ def save_page(page_name):
         
         trigger_hook('after_page_save', page_name, file_path=page_file_path, app_context=app)
         
+        #--Old locking mechanism--
         lockpage = f"{os.path.basename(page_file_path)}.lock"
         os.remove(lockpage)  # Remove the lock file after saving
         app.logger.info(f"Lock file removed for page: {page_name}.lock")
-
+        #--
         return redirect(url_for('view_page', page_name=page_name))
     except PermissionError as e: 
         flash(str(e), "error")
@@ -515,19 +556,52 @@ def delete_page(page_name):
             os.remove(page_file_path)
             flash(f"Page '{page_name}' deleted successfully.", "success")
             app.logger.info(f"Page deleted: {page_file_path}")
+
             trigger_hook('after_page_delete', page_name, file_path=page_file_path, app_context=app)
+
+            lock_path = _get_lock_path(page_name)
+            if os.path.exists(lock_path):
+                os.remove(lock_path)
+                app.logger.info(f"Lock file removed upon page deletion: {page_name}")
+
             return redirect(url_for('index')) 
         else:
             flash(f"Page '{page_name}' not found, cannot delete.", "error")
             app.logger.warning(f"Attempted to delete non-existent page: {page_file_path}")
-            return redirect(url_for('index')) 
+            return redirect(url_for('index'))
 
     except Exception as e: 
         flash(f"Error deleting page '{page_name}': {e}", "error")
         app.logger.error(f"Error deleting page {page_name}: {e}", exc_info=True)
         return redirect(url_for('index'))
 
+@app.route('/<path:page_name>/cancel-edit', methods=['POST'])
+def cancel_edit(page_name):
+    # Normalize the page name just in case
+    page_name = '/'.join(slugify(part) for part in filter(None, page_name.split('/')))
+    lock_path = _get_lock_path(page_name)
 
+    # Security: Only delete the lock if it exists and belongs to the current user (or an admin)
+    if os.path.exists(lock_path):
+        try:
+            with open(lock_path, 'r', encoding='utf-8') as f:
+                _lock_timestamp, lock_user = f.read().strip().split(';', 1)
+
+            # from plugins.acl_plugin import check_permission as acl_check_permission
+            # is_admin = acl_check_permission(app, g.get('current_user'), "admin_site")
+
+            if lock_user == g.get('current_user'): # Uncomment if you want admins to break locks
+                os.remove(lock_path)
+                app.logger.info(f"User '{g.get('current_user')}' canceled edit, lock removed for '{page_name}'.")
+                flash("Edit canceled.", "info")
+            else:
+                flash("You do not have permission to unlock this page.", "error")
+
+        except Exception as e:
+            app.logger.error(f"Error processing cancel-edit for '{page_name}': {e}")
+            flash("An error occurred while trying to cancel the edit.", "error")
+
+    return redirect(url_for('view_page', page_name=page_name))
 
 # --- Route to Serve Media Files ---
 @app.route('/media/<path:filename>') # Or use app.config['MEDIA_URL_PREFIX']

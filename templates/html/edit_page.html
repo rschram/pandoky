@@ -25,12 +25,6 @@
               {% if (page_exists and check_permission('edit_page', page_name)) or (not page_exists and check_permission('create_page', page_name)) %}
               <button type="submit">Save Page</button>
               {% endif %}
-                {% if page_exists %}
-                    <a href="{{ url_for('view_page', page_name=page_name) }}" class="cancel-link">Cancel</a>
-                {% else %}
-                    {# If page doesn't exist, "Cancel" means cancel creation, go to home #}
-                    <a href="{{ url_for('index') }}" class="cancel-link">Cancel</a>
-                {% endif %}
             </div>
             {% if page_exists and check_permission('delete_page', page_name) %}
             <div>
@@ -40,6 +34,10 @@
         </div>
     </form>
     
+    <form action="{{ url_for('cancel_edit', page_name=page_name) }}" method="post" style="display: inline;">
+        <button type="submit" class="cancel-button">Cancel</button>
+    </form>
+
     {% if page_exists %}
     <form action="{{ url_for('delete_page', page_name=page_name) }}" method="POST" id="deleteForm" style="display: none;">
         {# This form is hidden and submitted by JavaScript #}
