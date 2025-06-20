@@ -413,7 +413,7 @@ def edit_page(page_name):
         if not acl_check_permission(app, g.get('current_user'), required_action, page_name):
              if g.get('current_user') is None:
                  flash(f"You need to log in to {required_action.replace('_page', '')} pages.", "warning")
-                 return redirect(url_for('auth_plugin.login_route', next=request.url))
+                 return redirect(url_for('auth_plugin.login_route'))
              else:
                  flash(f"You do not have permission to {required_action.replace('_page', '')} this page.", "error")
                  abort(403)
