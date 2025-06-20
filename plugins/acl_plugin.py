@@ -174,8 +174,8 @@ def register(app_instance, register_hook_func):
     # Make check_permission available to templates as a global function
     def template_check_permission_wrapper(action, resource_path=None): # resource_path ignored by simple ACL
         return check_permission(app_instance, g.get('current_user'), action, resource_path)
-    app_instance.jinja_env.globals['check_permission'] = template_check_permission_wrapper
-    app_instance.logger.info("ACLPlugin: Registered 'check_permission' as a global for templates.")
+    app_instance.jinja_env.globals['acl_check_permission'] = template_check_permission_wrapper
+    app_instance.logger.info("ACLPlugin: Registered 'acl_check_permission' as a global for templates.")
 
     # Initialize data files if they don't exist
     default_config = {

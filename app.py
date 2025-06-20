@@ -92,6 +92,9 @@ def load_plugins():
             except Exception as e:
                 app.logger.error(f"Failed to load plugin package {module_name}: {e}", exc_info=True)
 
+load_plugins()
+trigger_hook('app_initialized', app=app) 
+
 # --- Custom Jinja2 Filter Definition ---
 def anydate_filter(value, format_string="%B %d, %Y"):
     if not value: return ""
@@ -632,8 +635,8 @@ def serve_media_file(filename):
 
 
 if __name__ == '__main__':
-    load_plugins()
-    trigger_hook('app_initialized', app=app) 
+#    load_plugins()
+#    trigger_hook('app_initialized', app=app) 
 
     try:
         pypandoc.get_pandoc_version()

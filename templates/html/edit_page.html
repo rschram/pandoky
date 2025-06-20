@@ -22,11 +22,11 @@
         </div>
         <div class="form-actions">
             <div class="form-actions-main">
-              {% if (page_exists and check_permission('edit_page', page_name)) or (not page_exists and check_permission('create_page', page_name)) %}
+              {% if (page_exists and acl_check_permission('edit_page', page_name)) or (not page_exists and acl_check_permission('create_page', page_name)) %}
               <button type="submit">Save Page</button>
               {% endif %}
             </div>
-            {% if page_exists and check_permission('delete_page', page_name) %}
+            {% if page_exists and acl_check_permission('delete_page', page_name) %}
             <div>
                  <button type="button" class="button-danger" onclick="confirmDelete()">Delete Page</button>
             </div>
