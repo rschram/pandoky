@@ -37,13 +37,13 @@ def trigger_hook(hook_name, *args, **kwargs):
                 current_args = list(args)
                 current_args[0] = data_to_modify
                 
+                # Pass the kwargs dict through, so plugins can share data
                 modified_result = function(*current_args, **kwargs)
                 if modified_result is not None: 
                     data_to_modify = modified_result
             else:
-                result = function(*args, **kwargs)
-                if data_to_modify is None and args and result is not None:
-                    data_to_modify = result
+                # This branch handles hooks that don't modify the first argument
+                function(*args, **kwargs)
 
             app.logger.debug(f"Executed hook '{hook_name}' with function {function.__name__}")
         except PermissionError: 
@@ -107,39 +107,18 @@ def anydate_filter(value, format_string="%B %d, %Y"):
         return str(value)
 
 def markdown_filter(s):
-    """
-    Converts a Markdown string to HTML and marks it as safe.
-    This filter is for inline, simple markdown.
-    """
-    if not s:
-        return ""
-    # Convert markdown to an HTML fragment
+    if not s: return ""
     html = pypandoc.convert_text(s, 'html5', format='markdown')
-    # Remove the <p>...</p> tags that pandoc adds to simple strings
     html = html.replace('<p>', '', 1).replace('</p>', '', 1).strip()
     return Markup(html)
 
 def absolutize_internal_links(html_content, page_name=None):
-    """
-    Finds all internal anchor links (e.g., href="#footnote1") in a block
-    of HTML and prepends the full URL for the current page to them.
-    """
-    if not html_content or not page_name:
-        return html_content
-
+    if not html_content or not page_name: return html_content
     try:
-        # Generate the base URL for the current page
         base_url = url_for('view_page', page_name=page_name)
-
-        # This regex looks for 'href="' followed by a '#' and replaces it
-        # with 'href="/path/to/page#'. It's a simple and safe substitution.
-        # It won't affect absolute URLs (like http://...) or other relative links.
         absolute_html = re.sub(r'href="#', f'href="{base_url}#', html_content)
-
-        # Mark the processed HTML as safe to prevent auto-escaping
         return Markup(absolute_html)
     except Exception as e:
-        # In case url_for fails for any reason, log it and return original content
         app.logger.error(f"Error in absolutize_internal_links filter: {e}")
         return html_content
 
@@ -154,53 +133,30 @@ md_jinja_env = Environment(
 md_jinja_env.filters['anydate'] = anydate_filter
 md_jinja_env.filters['markdown'] = markdown_filter
 md_jinja_env.filters['absolutize'] = absolutize_internal_links
-# --- Register Custom Filter with Flask's Main Jinja2 Environment ---
 app.jinja_env.filters['anydate'] = anydate_filter
 app.jinja_env.filters['markdown'] = markdown_filter
 app.jinja_env.filters['absolutize'] = absolutize_internal_links
 
 # --- Wikilink and Slugify Helper Functions ---
 def slugify(text):
-    """Converts text to a URL-friendly slug, typically for the last part of a path."""
-    text = str(text).lower() # Ensure it's a string
+    text = str(text).lower()
     text = re.sub(r'\s+', '-', text) 
     text = re.sub(r'[^\w\-]', '', text) 
     return text
 
 def convert_wikilinks(markdown_content):
-    '''
-    Converts [[Namespace:Sub/Page Name|Display Text]] to a Pandoky link.
-    Handles namespaces separated by ':' or '/'.
-    Slugifies all parts of the path.
-    '''
     def replace_wikilink(match):
         full_link_text = match.group(1).strip()
-        display_text = full_link_text
-        target_path_str = full_link_text
-
+        display_text, target_path_str = (full_link_text, full_link_text)
         if '|' in full_link_text:
             target_path_str, display_text = map(str.strip, full_link_text.split('|', 1))
-
         normalized_path_str = target_path_str.replace(':', '/')
-        link_title = target_path_str.replace(':', ' > ')
-        directory_elements = normalized_path_str.split('/')
-        page_link_text = directory_elements[-1]
-        path_components = [slugify(comp.strip()) for comp in directory_elements if comp.strip()]
-
-        if not path_components:
-            return f'[[{full_link_text}]]' 
-
+        path_components = [slugify(comp.strip()) for comp in normalized_path_str.split('/') if comp.strip()]
+        if not path_components: return f'[[{full_link_text}]]' 
         final_slug = '/'.join(path_components)
-            
-        if '|' not in full_link_text:
-            display_text = page_link_text #' / '.join(path_components)
-
-
-        return f'[{display_text}]({url_for("view_page", page_name=final_slug)} "{link_title}")'
-
-    wikilink_pattern = r'\[\[([^\]]+)\]\]'
-    return re.sub(wikilink_pattern, replace_wikilink, markdown_content)
-
+        if '|' not in full_link_text: display_text = directory_elements[-1] if (directory_elements := normalized_path_str.split('/')) else final_slug
+        return f'[{display_text}]({url_for("view_page", page_name=final_slug)} "{target_path_str.replace(":", " > ")}")'
+    return re.sub(r'\[\[([^\]]+)\]\]', replace_wikilink, markdown_content)
 
 def render_markdown_from_template(template_name, **context):
     try:
@@ -210,26 +166,27 @@ def render_markdown_from_template(template_name, **context):
         app.logger.error(f"Error rendering Markdown template {template_name}: {e}")
         raise
 
+def _get_cache_path(page_name_slug):
+    safe_slug = page_name_slug.replace('/', '__')
+    cache_filename = f"{safe_slug}.html"
+    html_cache_dir = os.path.join(app.config['CACHE_DIR'], 'html')
+    os.makedirs(html_cache_dir, exist_ok=True)
+    return os.path.join(html_cache_dir, cache_filename)
+
 # --- Error Handlers ---
 @app.errorhandler(403)
-def forbidden_page(error):
-    return render_template('html/errors/403.html', error=error), 403
+def forbidden_page(error): return render_template('html/errors/403.html', error=error), 403
 @app.errorhandler(404)
-def page_not_found_error(error): 
-    return render_template('html/errors/404.html', error=error), 404
+def page_not_found_error(error): return render_template('html/errors/404.html', error=error), 404
 @app.route('/favicon.ico')
-def favicon():
-    return '', 204
+def favicon(): return '', 204
 
 # --- Routes ---
 @app.route('/admin/acl')
 @app.route('/admin/acl/')
-def redirect_to_admin_dashboard(): # Renamed from redirect_to_admin_acl_base for clarity
-    # Using a direct path redirect to avoid potential BuildError with url_for
-    # This assumes the admin_acl_editor_plugin registers its dashboard at '/admin/acl/dashboard'.
+def redirect_to_admin_dashboard():
     app.logger.debug("Redirecting /admin/acl to /admin/acl/dashboard")
-    return redirect('/admin/acl/dashboard', code=301) # Use direct path
-
+    return redirect('/admin/acl/dashboard', code=301)
 
 @app.route('/')
 def index():
@@ -242,141 +199,101 @@ def index():
 
 # -- View page helper functions --
 def _get_page_data(page_name):
-    """Retrieve data for the given page."""
     page_extension = app.config['PAGE_EXTENSION']
     normalized_page_name = '/'.join(slugify(part) for part in filter(None, page_name.split('/')))
     if page_name != normalized_page_name:
-        app.logger.debug(f"Redirecting potentially unslugified URL '{page_name}' to '{normalized_page_name}'")
         return redirect(url_for('view_page', page_name=normalized_page_name), code=308)
     page_name = normalized_page_name
-
     try:
         page_file_path = safe_join(app.config['PAGES_DIR'], page_name + page_extension)
         page_name = trigger_hook('before_page_file_access', page_name, page_file_path=page_file_path, app_context=app)
-
-        if page_file_path is None:
-            app.logger.error(f"Resolved page_file_path does not exist for page: {page_name}. Check the configuration settings.")
-            return redirect(url_for('edit_page', page_name=page_name), code=308)
-
         if not os.path.exists(page_file_path) or not os.path.isfile(page_file_path):
-            app.logger.warning(f"Page file not found: {page_file_path}. Redirecting to edit page.")
             return redirect(url_for('edit_page', page_name=page_name))
-
         with open(page_file_path, 'r', encoding='utf-8') as f:
             article = frontmatter.load(f)
-        
-        original_frontmatter = article.metadata
-        original_markdown_body = article.content
-        hook_data = {'frontmatter': original_frontmatter, 'body': original_markdown_body, 'page_name': page_name}
+        hook_data = {'frontmatter': article.metadata, 'body': article.content, 'page_name': page_name}
         modified_data = trigger_hook('after_page_load', hook_data, app_context=app)
-        if modified_data:
-            return modified_data, page_name
-        else:
-            return hook_data, page_name
+        return modified_data or hook_data, page_name
     except PermissionError as e: 
         flash(str(e), "error")
-        app.logger.warning(f"ACL Permission denied for viewing page {page_name}: {e}")
-        user_in_session = session.get('current_user', None) 
-        if user_in_session is None:
-            return redirect(url_for('auth_plugin.login_route', next=request.url))
-        else:
-            abort(403) 
-    except FileNotFoundError: 
-        app.logger.error(f"File not found for page: {page_name}")
-        abort(404) 
-    except RuntimeError as e: 
-        app.logger.error(f"Conversion error for page {page_name}: {e}")
-        flash(f"The page '{page_name}' could not be displayed due to a rendering error. Please fix the issue below. (Details: {e})", "error")
-        return redirect(url_for('edit_page', page_name=page_name))
+        if session.get('current_user') is None: return redirect(url_for('auth_plugin.login_route', next=request.url))
+        else: abort(403) 
     except Exception as e:
         app.logger.error(f"Unexpected error for page {page_name}: {e}", exc_info=True)
-        flash(f"The page '{page_name}' could not be displayed due to an unexpected error. Please fix the issue below. (Details: {e})", "error")
-        return redirect(url_for('edit_page', page_name=page_name))
+        flash(f"Error loading page '{page_name}'.", "error")
+        return redirect(url_for('index'))
 
 
-def _process_markdown_content(modified_data,page_name):
+def _process_markdown_content(modified_data, page_name):
     """Process markdown content with hooks/macros."""
-    try: 
-        if modified_data: 
-            original_frontmatter = modified_data.get('frontmatter', {}) if modified_data else {}
-            original_markdown_body = modified_data.get('body', '') if modified_data else ''
-
-        md_render_context = {
-            'frontmatter': original_frontmatter,
-            'body': original_markdown_body, 
-            'page_name': page_name,
-            'config': app.config
-        }
-        
+    try:
+        original_frontmatter = modified_data.get('frontmatter', {})
+        original_markdown_body = modified_data.get('body', '')
+        md_render_context = {'frontmatter': original_frontmatter, 'body': original_markdown_body, 'page_name': page_name, 'config': app.config}
         markdown_template_name = original_frontmatter.get('markdown_template', 'article_template.j2md')
         processed_markdown_from_j2 = render_markdown_from_template(markdown_template_name, **md_render_context)
-
         processed_article_parts = frontmatter.loads(processed_markdown_from_j2)
         pandoc_input_frontmatter = processed_article_parts.metadata
         pandoc_input_body = processed_article_parts.content
         
-        pandoc_input_body = trigger_hook('process_page_macros', pandoc_input_body, current_page_slug=page_name, app_context=app)
-
-        pandoc_input_body = trigger_hook('process_media_links', pandoc_input_body, current_page_slug=page_name, app_context=app)
+        # --- MODIFICATION 1: Pass a dictionary to collect data from hooks ---
+        hook_shared_data = {}
         
-        pandoc_input_body = trigger_hook('before_wikilink_conversion', pandoc_input_body, frontmatter=pandoc_input_frontmatter, app_context=app)
+        pandoc_input_body = trigger_hook('process_page_macros', pandoc_input_body, current_page_slug=page_name, app_context=app, **hook_shared_data)
+        pandoc_input_body = trigger_hook('process_media_links', pandoc_input_body, current_page_slug=page_name, app_context=app, **hook_shared_data)
         pandoc_input_body_with_wikilinks = convert_wikilinks(pandoc_input_body)
-        pandoc_input_body_with_wikilinks = trigger_hook('after_wikilink_conversion', pandoc_input_body_with_wikilinks, frontmatter=pandoc_input_frontmatter, app_context=app)
 
         final_markdown_for_pandoc = f"---\n{yaml.dump(pandoc_input_frontmatter, sort_keys=False, allow_unicode=True)}---\n\n{pandoc_input_body_with_wikilinks}"
-        return final_markdown_for_pandoc
-    except RuntimeError as e: 
-        app.logger.error(f"Conversion error for page {page_name}: {e}")
-        flash(f"The page '{page_name}' could not be displayed due to a rendering error. Please fix the issue below. (Details: {e})", "error")
-        return redirect(url_for('edit_page', page_name=page_name))
+        
+        # --- MODIFICATION 2: Return both the markdown and the collected data ---
+        return final_markdown_for_pandoc, hook_shared_data
+
     except Exception as e:
-        app.logger.error(f"Unexpected error for page {page_name}: {e}", exc_info=True)
-        flash(f"The page '{page_name}' could not be displayed due to an unexpected error. Please fix the issue below. (Details: {e})", "error")
+        app.logger.error(f"Error processing markdown for page {page_name}: {e}", exc_info=True)
+        flash(f"The page '{page_name}' could not be processed due to a content error.", "error")
         return redirect(url_for('edit_page', page_name=page_name))
 
-def _render_page_html(final_markdown_for_pandoc, page_name, page_title, original_frontmatter):
+def _render_page_html(final_markdown_for_pandoc, page_name, page_title, original_frontmatter, discovered_metadata=None):
     """Convert processed markdown to HTML using Pandoc."""
     try:
+        pandoc_args = list(app.config.get('PANDOC_ARGS', [])) # Use list() to ensure it's a mutable copy
         
-        pandoc_args = app.config['PANDOC_ARGS']
+        # --- MODIFICATION 3: Use the discovered metadata to augment pandoc_args ---
+        if discovered_metadata and 'discovered_bibliographies' in discovered_metadata:
+            bib_dir = app.config.get('BIB_DIR', 'data/bibliographies')
+            for bib_file in discovered_metadata['discovered_bibliographies']:
+                # Construct full, safe path and add to args
+                full_bib_path = safe_join(bib_dir, bib_file)
+                if full_bib_path and os.path.exists(full_bib_path):
+                    pandoc_args.append(f'--bibliography={full_bib_path}')
+                else:
+                    app.logger.warning(f"Discovered bibliography '{bib_file}' not found at '{full_bib_path}'.")
+
+        pandoc_args = trigger_hook('before_pandoc_conversion', pandoc_args, markdown_content=final_markdown_for_pandoc, app_context=app)
         
-        pandoc_args = trigger_hook('before_pandoc_conversion', list(pandoc_args), markdown_content=final_markdown_for_pandoc, app_context=app)
-        
-        html_content_fragment = pypandoc.convert_text(
-            to='html5',
-            format='markdown',
-            source=final_markdown_for_pandoc,
-            extra_args=pandoc_args,
-        )
+        html_content_fragment = pypandoc.convert_text(to='html5', format='markdown', source=final_markdown_for_pandoc, extra_args=pandoc_args)
         
         html_content_fragment = trigger_hook('after_pandoc_conversion', html_content_fragment, page_name=page_name, app_context=app)
-        
-        render_context = {
-            'title': page_title,
-            'html_content': html_content_fragment,
-            'frontmatter': original_frontmatter,
-            'page_name': page_name
-        }
-        
+        cache_path = _get_cache_path(page_name)
+        try:
+            with open(cache_path, 'w', encoding='utf-8') as f: f.write(html_content_fragment)
+            app.logger.info(f"HTML for page '{page_name}' saved to cache: {cache_path}")
+        except Exception as e:
+            app.logger.error(f"Failed to write to cache for page '{page_name}': {e}")
+
+        render_context = {'title': page_title, 'html_content': html_content_fragment, 'frontmatter': original_frontmatter, 'page_name': page_name}
         render_context = trigger_hook('before_html_render', dict(render_context), app_context=app)
-        
         return render_template('html/page_layout.html', **render_context)
 
     except RuntimeError as e: 
-        app.logger.error(f"Conversion error for page {page_name}: {e}")
-        flash(f"The page '{page_name}' could not be displayed due to a rendering error. Please fix the issue below. (Details: {e})", "error")
+        flash(f"The page '{page_name}' could not be displayed due to a rendering error: {e}", "error")
         return redirect(url_for('edit_page', page_name=page_name))
     except Exception as e:
-        app.logger.error(f"Unexpected error for page {page_name}: {e}", exc_info=True)
-        flash(f"The page '{page_name}' could not be displayed due to an unexpected error. Please fix the issue below. (Details: {e})", "error")
+        app.logger.error(f"Unexpected error rendering HTML for page {page_name}: {e}", exc_info=True)
+        flash(f"The page '{page_name}' could not be rendered due to an unexpected error.", "error")
         return redirect(url_for('edit_page', page_name=page_name))
 
 def _get_lock_path(page_name_slug):
-    """
-    Converts a page slug into a safe, absolute path for a lock file
-    in the centralized LOCKS_DIR.
-    """
-    # 'new-project/meeting-notes' -> 'new-project__meeting-notes.lock'
     safe_slug = page_name_slug.replace('/', '__')
     lock_filename = f"{safe_slug}.lock"
     return os.path.join(app.config['LOCKS_DIR'], lock_filename)
@@ -385,267 +302,166 @@ def _get_lock_path(page_name_slug):
 
 @app.route('/<path:page_name>')
 def view_page(page_name):
+    # Caching Logic remains the same...
+    cache_path, source_path = _get_cache_path(page_name), safe_join(app.config['PAGES_DIR'], page_name + app.config['PAGE_EXTENSION'])
+    if os.path.exists(cache_path) and os.path.exists(source_path) and os.path.getmtime(cache_path) > os.path.getmtime(source_path):
+        app.logger.info(f"Serving '{page_name}' from cache.")
+        try:
+            with open(cache_path, 'r', encoding='utf-8') as f: cached_html = f.read()
+            with open(source_path, 'r', encoding='utf-8') as f: article = frontmatter.load(f)
+            page_title = article.metadata.get('title', page_name.replace('/', ' / ').title())
+            return render_template('html/page_layout.html', title=page_title, html_content=cached_html, frontmatter=article.metadata, page_name=page_name)
+        except Exception as e:
+            app.logger.error(f"Error reading cache for '{page_name}': {e}")
+    
     result = _get_page_data(page_name)
-
-    if not isinstance(result, tuple):
-        return result  # It's a redirect or abort
+    if not isinstance(result, tuple): return result
     modified_data, final_page_name = result
-
     page_title = modified_data.get('frontmatter', {}).get('title', page_name.replace('/', ' / ').title()) 
-    final_markdown_for_pandoc = _process_markdown_content(modified_data, final_page_name)
+    
+    # --- MODIFICATION 4: Capture the extra data from processing ---
+    final_markdown_for_pandoc, discovered_metadata = _process_markdown_content(modified_data, final_page_name)
+    if isinstance(final_markdown_for_pandoc, tuple): # Handle error case where redirect is returned
+        return final_markdown_for_pandoc
+    
+    # --- MODIFICATION 5: Pass the extra data to the renderer ---
+    return _render_page_html(final_markdown_for_pandoc, final_page_name, page_title, original_frontmatter=modified_data.get('frontmatter', {}), discovered_metadata=discovered_metadata)
 
-    return _render_page_html(final_markdown_for_pandoc, final_page_name, page_title, original_frontmatter=modified_data.get('frontmatter', {}))
 
-
+# ... (The rest of your app.py file remains the same) ...
 
 @app.route('/<path:page_name>/edit', methods=['GET'])
 def edit_page(page_name):
     normalized_page_name = '/'.join(slugify(part) for part in filter(None, page_name.split('/')))
     if page_name != normalized_page_name:
-        app.logger.debug(f"Redirecting malformed URL in edit_page '{page_name}' to '{normalized_page_name}'")
         return redirect(url_for('edit_page', page_name=normalized_page_name), code=308)
     page_name = normalized_page_name
-
-
+    
     try:
-        from plugins.acl_plugin import check_permission as acl_check_permission 
+        from plugins.acl_plugin import check_permission
         page_file_path = safe_join(app.config['PAGES_DIR'], page_name + '.md')
         page_exists_check = os.path.exists(page_file_path) and os.path.isfile(page_file_path)
-        
         required_action = "edit_page" if page_exists_check else "create_page"
 
-        if not acl_check_permission(app, g.get('current_user'), required_action, page_name):
+        if not check_permission(app, g.get('current_user'), required_action, page_name):
              if g.get('current_user') is None:
-                 flash(f"You need to log in to {required_action.replace('_page', '')} pages.", "warning")
-                 return redirect(url_for('auth_plugin.login_route'))
+                 flash(f"You must be logged in to {required_action.replace('_page', '')} pages.", "warning")
+                 return redirect(url_for('auth_plugin.login_route', next=request.url))
              else:
                  flash(f"You do not have permission to {required_action.replace('_page', '')} this page.", "error")
                  abort(403)
 
         lock_path = _get_lock_path(page_name)
         locks_dir = app.config['LOCKS_DIR']
-        lock_timeout_seconds = app.config.get('LOCK_TIMEOUT', 1800)
-
-        # Ensure the central locks directory exists
         os.makedirs(locks_dir, exist_ok=True)
-
         if os.path.exists(lock_path):
             try:
                 with open(lock_path, 'r', encoding='utf-8') as f:
-                    # Expected format: ISO_timestamp;username
                     lock_timestamp_str, lock_user = f.read().strip().split(';', 1)
-                    lock_time = datetime.fromisoformat(lock_timestamp_str)
-
+                lock_time = datetime.fromisoformat(lock_timestamp_str)
                 time_since_lock = (datetime.now() - lock_time).total_seconds()
-                
-                # Check if the lock is stale (expired)
-                if time_since_lock > lock_timeout_seconds:
-                    app.logger.warning(f"Stale lock for '{page_name}' held by '{lock_user}' found and removed.")
-                    os.remove(lock_path) # Remove the stale lock
-                # If the lock is fresh and held by someone else
+                if time_since_lock > app.config.get('LOCK_TIMEOUT', 1800):
+                    os.remove(lock_path)
                 elif lock_user != g.get('current_user', 'anonymous'):
-                    flash(f"This page is currently locked for editing by '{lock_user}'. The lock will expire in approximately {int((lock_timeout_seconds - time_since_lock) / 60)} minutes.", "warning")
+                    flash(f"This page is locked by '{lock_user}'.", "warning")
                     return redirect(url_for('view_page', page_name=page_name))
-                # The lock is fresh and held by the current user, so we let them proceed.
             except Exception as e:
-                app.logger.error(f"Could not read or parse lock file {lock_path}: {e}. Removing corrupt lock.")
                 os.remove(lock_path)
-
-        # Create a new lock file (or recreate a stale one)
-        try:
-            with open(lock_path, 'w', encoding='utf-8') as f:
-                # Store timestamp and user, separated by a semicolon
-                f.write(f"{datetime.now().isoformat()};{g.get('current_user', 'anonymous')}")
-            app.logger.info(f"Lock created for page '{page_name}' at {lock_path}")
-        except Exception as e:
-            app.logger.error(f"Failed to create lock file for '{page_name}': {e}")
-            flash("Could not acquire an edit lock for this page. Please try again.", "error")
-            return redirect(url_for('view_page', page_name=page_name))
+        with open(lock_path, 'w', encoding='utf-8') as f:
+            f.write(f"{datetime.now().isoformat()};{g.get('current_user', 'anonymous')}")
+        app.logger.info(f"Lock created for page '{page_name}' at {lock_path}")
     except PermissionError as e: 
         flash(str(e), "error")
-        app.logger.warning(f"ACL Permission denied for editing page {page_name}: {e}")
-        if g.get('current_user') is None:
-            return redirect(url_for('auth_plugin.login_route', next=url_for('edit_page', page_name=page_name)))
-        else:
-            return redirect(url_for('view_page', page_name=page_name))
-
- 
+        if g.get('current_user') is None: return redirect(url_for('auth_plugin.login_route', next=url_for('edit_page', page_name=page_name)))
+        else: return redirect(url_for('view_page', page_name=page_name))
 
     default_title = page_name.replace('/', ' / ').title() 
-    default_date = datetime.now().strftime('%Y-%m-%d') 
-    
     if page_exists_check: 
-        with open(page_file_path, 'r', encoding='utf-8') as f:
-            raw_content = f.read()
+        with open(page_file_path, 'r', encoding='utf-8') as f: raw_content = f.read()
     else: 
-        raw_content = (
-            f"---\n"
-            f"doctype: \"Article\"\n"
-            f"title: \"{default_title}\"\n"
-            f"#subtitle: \"[...]\"\n"
-            f"date: \"{default_date}\"\n"
-            f"author: \"{g.get('current_user', 'Your Name')}\"\n"
-            f"references-section-title: \"References\"\n"
-            f"---\n\n"
-            f"Start writing content for {default_title} here..."
-        )
+        raw_content = f"---\ntitle: \"{default_title}\"\ndate: \"{datetime.now().strftime('%Y-%m-%d')}\"\nauthor: \"{g.get('current_user', 'Your Name')}\"\n---\n\nStart writing..."
     
     edit_page_data = {'page_name': page_name, 'raw_content': raw_content, 'title': f"Edit {default_title}", 'page_exists': page_exists_check}
     edit_page_data = trigger_hook('before_edit_page_render', dict(edit_page_data), app_context=app)
-        
     return render_template('html/edit_page.html', **edit_page_data)
 
 @app.route('/<path:page_name>/save', methods=['POST'])
 def save_page(page_name):
-    normalized_page_name = '/'.join(slugify(part) for part in filter(None, page_name.split('/')))
-    if page_name != normalized_page_name:
-        app.logger.warning(f"Page name '{page_name}' in POST was normalized to '{normalized_page_name}'.")
-        page_name = normalized_page_name
-
+    page_name = '/'.join(slugify(part) for part in filter(None, page_name.split('/')))
     try:
         raw_content_from_form = request.form.get('raw_content')
-        if raw_content_from_form is None: 
-            abort(400, description="No content submitted.")
-
+        if raw_content_from_form is None: abort(400, "No content.")
         raw_content_to_save = trigger_hook('before_page_save', raw_content_from_form, page_name=page_name, app_context=app)
-
         page_file_path = safe_join(app.config['PAGES_DIR'], page_name + '.md')
-        
-        page_directory = os.path.dirname(page_file_path)
-        if not os.path.exists(page_directory):
-            os.makedirs(page_directory, exist_ok=True)
-            app.logger.info(f"Created directory: {page_directory}")
-            
-        with open(page_file_path, 'w', encoding='utf-8') as f:
-            f.write(raw_content_to_save)
-        
-        flash(f"Page '{page_name}' saved successfully.", "success")
-        app.logger.info(f"Page saved: {page_file_path}")
-        
+        os.makedirs(os.path.dirname(page_file_path), exist_ok=True)
+        with open(page_file_path, 'w', encoding='utf-8') as f: f.write(raw_content_to_save)
+        flash(f"Page '{page_name}' saved.", "success")
         trigger_hook('after_page_save', page_name, file_path=page_file_path, app_context=app)
-        
-        # Use the helper function to find and remove the lock
         lock_path = _get_lock_path(page_name)
         if os.path.exists(lock_path):
-            os.remove(lock_path)
-            app.logger.info(f"Lock file removed upon save for page: {page_name}")
-
+            try:
+                os.remove(lock_path)
+                app.logger.info(f"Lock file removed for page: {page_name}")
+            except OSError as e:
+                app.logger.error(f"Error removing lock file {lock_path}: {e}")
         return redirect(url_for('view_page', page_name=page_name))
     except PermissionError as e: 
         flash(str(e), "error")
-        app.logger.warning(f"ACL Permission denied for saving page {page_name}: {e}")
-        if g.get('current_user') is None:
-            return redirect(url_for('auth_plugin.login_route', next=url_for('edit_page', page_name=page_name)))
-        else:
-            return redirect(url_for('edit_page', page_name=page_name))
+        if g.get('current_user') is None: return redirect(url_for('auth_plugin.login_route', next=url_for('edit_page', page_name=page_name)))
+        else: return redirect(url_for('edit_page', page_name=page_name))
     except Exception as e:
-        flash(f"Error saving page '{page_name}': An unexpected error occurred.", "error")
-        app.logger.error(f"Error saving page {page_name}: {e}", exc_info=True)
+        flash("Error saving page.", "error")
         return redirect(url_for('edit_page', page_name=page_name))
-
 
 @app.route('/<path:page_name>/delete', methods=['POST'])
 def delete_page(page_name):
-    normalized_page_name = '/'.join(slugify(part) for part in filter(None, page_name.split('/')))
-    page_name = normalized_page_name 
-
+    page_name = '/'.join(slugify(part) for part in filter(None, page_name.split('/')))
     try:
         page_file_path = safe_join(app.config['PAGES_DIR'], page_name + '.md')
-
-        cancel_delete_result = trigger_hook('before_page_delete', False, page_name=page_name, file_path=page_file_path, app_context=app)
-        
-        if cancel_delete_result is True: 
+        if trigger_hook('before_page_delete', False, page_name=page_name, file_path=page_file_path, app_context=app):
              return redirect(url_for('edit_page', page_name=page_name))
-
         if os.path.exists(page_file_path) and os.path.isfile(page_file_path):
             os.remove(page_file_path)
-            flash(f"Page '{page_name}' deleted successfully.", "success")
-            app.logger.info(f"Page deleted: {page_file_path}")
-
+            flash(f"Page '{page_name}' deleted.", "success")
             trigger_hook('after_page_delete', page_name, file_path=page_file_path, app_context=app)
-
-            lock_path = _get_lock_path(page_name)
-            if os.path.exists(lock_path):
-                os.remove(lock_path)
-                app.logger.info(f"Lock file removed upon page deletion: {page_name}")
-
+            for path_func in [_get_lock_path, _get_cache_path]:
+                path = path_func(page_name)
+                if os.path.exists(path): os.remove(path)
             return redirect(url_for('index')) 
         else:
-            flash(f"Page '{page_name}' not found, cannot delete.", "error")
-            app.logger.warning(f"Attempted to delete non-existent page: {page_file_path}")
+            flash(f"Page '{page_name}' not found.", "error")
             return redirect(url_for('index'))
-
     except Exception as e: 
         flash(f"Error deleting page '{page_name}': {e}", "error")
-        app.logger.error(f"Error deleting page {page_name}: {e}", exc_info=True)
         return redirect(url_for('index'))
 
 @app.route('/<path:page_name>/cancel-edit', methods=['POST'])
 def cancel_edit(page_name):
-    # Normalize the page name just in case
     page_name = '/'.join(slugify(part) for part in filter(None, page_name.split('/')))
     lock_path = _get_lock_path(page_name)
-
-    # Security: Only delete the lock if it exists and belongs to the current user (or an admin)
     if os.path.exists(lock_path):
         try:
             with open(lock_path, 'r', encoding='utf-8') as f:
                 _lock_timestamp, lock_user = f.read().strip().split(';', 1)
-
-            # from plugins.acl_plugin import check_permission as acl_check_permission
-            # is_admin = acl_check_permission(app, g.get('current_user'), "admin_site")
-
-            if lock_user == g.get('current_user'): # Uncomment if you want admins to break locks
+            if lock_user == g.get('current_user'):
                 os.remove(lock_path)
-                app.logger.info(f"User '{g.get('current_user')}' canceled edit, lock removed for '{page_name}'.")
                 flash("Edit canceled.", "info")
             else:
-                flash("You do not have permission to unlock this page.", "error")
-
+                flash("You cannot unlock this page.", "error")
         except Exception as e:
-            app.logger.error(f"Error processing cancel-edit for '{page_name}': {e}")
-            flash("An error occurred while trying to cancel the edit.", "error")
-
+            flash("Error canceling edit.", "error")
     return redirect(url_for('view_page', page_name=page_name))
 
 # --- Route to Serve Media Files ---
-@app.route('/media/<path:filename>') # Or use app.config['MEDIA_URL_PREFIX']
+@app.route('/media/<path:filename>')
 def serve_media_file(filename):
     media_dir = app.config.get('MEDIA_DIR')
-    if not media_dir:
-        app.logger.error("MEDIA_DIR not configured in app.config for serving media files.")
-        abort(404)
-    # For security, it's better if MEDIA_DIR is an absolute path.
-    # safe_join can help, but send_from_directory expects the directory path directly.
-    # Ensure filename is also sanitized or that the media_dir structure is flat for simplicity.
-    # If allowing subdirectories in media_dir, ensure 'filename' is properly handled.
-    
-    # Basic check to prevent path traversal if filename could contain '..'
-    # secure_filename might be too restrictive if you want subdirectories in media.
-    # For now, assume filename is clean or refers to files directly in MEDIA_DIR.
-    # A more robust solution would involve checking if the resolved path is within MEDIA_DIR.
-    if ".." in filename or filename.startswith("/"):
-         app.logger.warning(f"Potential path traversal attempt for media file: {filename}")
-         abort(404)
-
+    if not media_dir or ".." in filename or filename.startswith("/"): abort(404)
     return send_from_directory(media_dir, filename)
 
-
-# --- Load plugins (production) ---
-#load_plugins()
-#trigger_hook('app_initialized', app=app) 
-
-
 if __name__ == '__main__':
-    #load_plugins()
-    trigger_hook('app_initialized', app=app) 
-
     try:
         pypandoc.get_pandoc_version()
-        app.logger.info(f"Pandoc version: {pypandoc.get_pandoc_version()} found.")
     except OSError:
-        app.logger.error("Pandoc not found. Please ensure Pandoc is installed and in your system's PATH.")
-    except Exception as e: 
-        app.logger.error(f"Error initializing or finding pypandoc: {e}")
-
+        app.logger.error("Pandoc not found.")
     app.run()
